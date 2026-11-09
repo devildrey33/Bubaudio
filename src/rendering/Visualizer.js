@@ -36,11 +36,7 @@ export default class Visualizer {
     #frame = 0;
 
 
-    constructor(
-        audio,
-        fragmentShader,
-        vertexShader
-    ) {
+    constructor(audio, fragmentShader, vertexShader) {
 
         this.#audio = audio;
 
@@ -68,19 +64,9 @@ export default class Visualizer {
             new THREE.Scene();
 
         this.#camera =
-            new THREE.OrthographicCamera(
-                -1,
-                1,
-                1,
-                -1,
-                0,
-                1
-            );
+            new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-        this.#renderer =
-            new THREE.WebGLRenderer({
-                antialias: true
-            });
+        this.#renderer = new THREE.WebGLRenderer({ antialias: true});
 
         this.#renderer.setSize(
             window.innerWidth,

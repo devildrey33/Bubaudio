@@ -50,13 +50,13 @@ const controls = new PlayerControls(audio, queue);
 
 
 const renderer = new Visualizer(
-        audio,
-        shaders.galaxy,
-//        shaders.plasma,
+    audio,
+//    shaders.galaxy,
+        shaders.plasma,
 //        shaders.tunnel,
 //        shaders.spiral,
-        shaders.fullscreen
-    );
+    shaders.fullscreen
+);
 
 renderer.start();
 
