@@ -1,0 +1,367 @@
+/******************************************************************************
+ * Zona de activación
+ *
+ * Ocupa el tercio inferior de la pantalla.
+ * Al entrar el ratón en esta zona aparecen los controles.
+ ******************************************************************************/
+
+#controls-trigger {
+
+    position: fixed;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    height: 33vh;
+
+    z-index: 1000;
+}
+
+
+/******************************************************************************
+ * Panel principal flotante
+ ******************************************************************************/
+
+#player-controls {
+
+    position: absolute;
+
+    left: 50%;
+    bottom: 24px;
+
+    min-width: 720px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 14px;
+
+    padding: 16px;
+
+    border-radius: 18px;
+
+    backdrop-filter: blur(12px);
+
+    background:
+        rgba(
+            0,
+            0,
+            0,
+            0.55
+        );
+
+    border:
+        1px solid
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
+
+    box-shadow:
+        0 10px 30px
+        rgba(
+            0,
+            0,
+            0,
+            0.45
+        );
+
+    transform:
+        translateX(-50%)
+        translateY(120%);
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    transition:
+        opacity 250ms ease,
+        transform 250ms ease;
+}
+
+
+/******************************************************************************
+ * Mostrar controles
+ ******************************************************************************/
+
+#controls-trigger:hover
+#player-controls {
+
+    opacity: 1;
+
+    pointer-events: auto;
+
+    transform:
+        translateX(-50%)
+        translateY(0);
+}
+
+
+/******************************************************************************
+ * Barra de progreso
+ ******************************************************************************/
+
+#player-progress-container {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+}
+
+
+/******************************************************************************
+ * Tiempo actual / duración
+ ******************************************************************************/
+
+#current-time,
+#total-time {
+
+    min-width: 48px;
+
+    color: white;
+
+    font-size: 13px;
+
+    font-family:
+        "Segoe UI",
+        sans-serif;
+
+    text-align: center;
+
+    user-select: none;
+}
+
+
+/******************************************************************************
+ * Barra de progreso
+ ******************************************************************************/
+
+#progress-bar {
+
+    flex: 1;
+
+    cursor: pointer;
+}
+
+
+/******************************************************************************
+ * Contenedor de botones
+ ******************************************************************************/
+
+#player-buttons-container {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 12px;
+}
+
+
+/******************************************************************************
+ * Botones genéricos
+ ******************************************************************************/
+
+.player-button {
+
+    width: 52px;
+    height: 52px;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    border: none;
+
+    border-radius: 12px;
+
+    color: white;
+
+    font-size: 22px;
+
+    cursor: pointer;
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
+
+    transition:
+        background-color 150ms ease,
+        transform 150ms ease,
+        box-shadow 150ms ease;
+}
+
+
+/******************************************************************************
+ * Hover botones
+ ******************************************************************************/
+
+.player-button:hover {
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.18
+        );
+
+    transform:
+        translateY(-2px);
+}
+
+
+/******************************************************************************
+ * Click botones
+ ******************************************************************************/
+
+.player-button:active {
+
+    transform:
+        scale(0.92);
+}
+
+
+/******************************************************************************
+ * Botón principal Play/Pause
+ ******************************************************************************/
+
+.player-button-primary {
+
+    width: 64px;
+    height: 64px;
+
+    font-size: 30px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #3d7eff,
+            #23b6ff
+        );
+
+    box-shadow:
+        0 0 20px
+        rgba(
+            61,
+            126,
+            255,
+            0.45
+        );
+}
+
+
+/******************************************************************************
+ * Hover del botón principal
+ ******************************************************************************/
+
+.player-button-primary:hover {
+
+    background:
+        linear-gradient(
+            135deg,
+            #5a92ff,
+            #45c2ff
+        );
+
+    box-shadow:
+        0 0 24px
+        rgba(
+            61,
+            126,
+            255,
+            0.65
+        );
+}
+
+
+/******************************************************************************
+ * Icono Play/Pause
+ ******************************************************************************/
+
+.icon-play {
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    width: 100%;
+    height: 100%;
+}
+
+
+/******************************************************************************
+ * Panel de volumen
+ ******************************************************************************/
+
+#volume-container {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    margin-left: 14px;
+}
+
+
+/******************************************************************************
+ * Icono volumen
+ ******************************************************************************/
+
+#volume-icon {
+
+    color: white;
+
+    font-size: 16px;
+
+    user-select: none;
+}
+
+
+/******************************************************************************
+ * Barra de volumen
+ ******************************************************************************/
+
+#volume-bar {
+
+    width: 120px;
+
+    cursor: pointer;
+}
+
+
+/******************************************************************************
+ * Aspecto general sliders
+ ******************************************************************************/
+
+input[type="range"] {
+
+    accent-color:
+        #3d7eff;
+}
+
+
+/******************************************************************************
+ * Scroll y selección
+ ******************************************************************************/
+
+body {
+
+    user-select: none;
+}

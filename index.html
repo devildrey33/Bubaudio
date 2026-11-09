@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>Bubaudio</title>
+
+    <link rel="stylesheet"
+          href="./src/styles.css">
+
+    <link rel="stylesheet"
+          href="./src/ui/controls.css">
+</head>
+
+<body>
+
+      <!-- Zona invisible de activación -->
+  <div id="controls-trigger">
+
+      <!-- Barra flotante -->
+<div id="player-controls">
+
+    <!-- Progreso -->
+    <div id="player-progress-container">
+
+        <span id="current-time">
+            00:00
+        </span>
+
+        <input
+            id="progress-bar"
+            type="range"
+            min="0"
+            max="100"
+            value="0"
+        >
+
+        <span id="total-time">
+            00:00
+        </span>
+
+    </div>
+
+
+    <!-- Controles -->
+    <div id="player-buttons-container">
+
+        <button id="btn-prev"
+                class="player-button"
+                title="Anterior">
+            ⏮
+        </button>
+
+        <button id="btn-stop"
+                class="player-button"
+                title="Detener">
+            ⏹
+        </button>
+
+        <button id="btn-play"
+                class="player-button player-button-primary"
+                title="Reproducir">
+
+            <span class="icon-play">
+                ▶
+            </span>
+
+        </button>
+
+        <button id="btn-next"
+                class="player-button"
+                title="Siguiente">
+            ⏭
+        </button>
+
+        <button id="btn-shuffle"
+                class="player-button"
+                title="Aleatorio">
+            🔀
+        </button>
+
+        <button id="btn-repeat"
+                class="player-button"
+                title="Repetir">
+            🔁
+        </button>
+        <button id="btn-select-folder"
+                class="player-button"
+                title="Seleccionar biblioteca">
+
+            📁
+
+        </button>
+
+        <!-- Volumen -->
+
+        <div id="volume-container">
+
+            <span id="volume-icon">
+                🔊
+            </span>
+
+            <input
+                id="volume-bar"
+                type="range"
+                min="0"
+                max="100"
+                value="100"
+            >
+
+        </div>
+
+    </div>
+
+</div>
+
+  </div>
+
+    <script type="module"
+            src="/src/main.js">
+    </script>
+
+</body>
+
+</html>
