@@ -1,5 +1,7 @@
 
+#ifdef GL_ES
 precision highp float;
+#endif
 
 varying vec2 vUv;
 
@@ -16,286 +18,287 @@ uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
 #define PI 3.14159265359
-#define TWO_PI 6.28318530718
 
-// --------------------------------------------
-// UTILIDADES
-// --------------------------------------------
+// --------------------------------------------------
+// UTILITIES
+// --------------------------------------------------
 
-float hash(vec2 p)
-{
-    return fract(
-        sin(dot(p, vec2(127.1, 311.7))) *
-        43758.5453
-    );
+float saturate(float x) {
+    return clamp(x, 0.0, 1.0);
 }
 
-float noise(vec2 p)
-{
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
-
     f = f * f * (3.0 - 2.0 * f);
 
     return mix(
-        mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+        mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+        mix(hash21(i + vec2(0.0, 1.0)),
+            hash21(i + vec2(1.0, 1.0)), f.x),
         f.y
     );
 }
 
-void main()
-{
-    // ----------------------------------------
-    // COORDENADAS
-    // ----------------------------------------
+// --------------------------------------------------
+// AUDIO
+// --------------------------------------------------
 
-    vec2 uv = vUv * 2.0 - 1.0;
+float spectrum(float x) {
+    return texture2D(
+        uSpectrum,
+        vec2(clamp(x, 0.0, 1.0), 0.5)
+    ).r;
+}
 
-    uv.x *= uResolution.x / uResolution.y;
-
-    float radius = length(uv);
-
-    float angle = atan(uv.y, uv.x);
-
-    float angle01 = fract(angle / TWO_PI);
-
-    // ----------------------------------------
-    // AUDIO
-    // ----------------------------------------
-
-    float wave = texture2D(
+float waveform(float x) {
+    return texture2D(
         uWaveform,
-        vec2(angle01, 0.0)
+        vec2(fract(x), 0.5)
     ).r;
+}
 
-    wave = wave * 2.0 - 1.0;
+// --------------------------------------------------
+// OCEAN WAVE FIELD
+// --------------------------------------------------
 
-    float fft = texture2D(
-        uSpectrum,
-        vec2(angle01, 0.0)
-    ).r;
-
-    float fft2 = texture2D(
-        uSpectrum,
-        vec2(fract(angle01 + 0.15), 0.0)
-    ).r;
-
-    // ----------------------------------------
-    // MOVIMIENTO ORGÁNICO
-    // ----------------------------------------
+float ocean(vec2 p) {
 
     float t = uTime;
 
-    float organic =
-        sin(angle * 3.0 + t * 0.8) * 0.025 +
-        sin(angle * 5.0 - t * 0.6) * 0.018 +
-        sin(angle * 8.0 + t * 0.4) * 0.010;
+    float bass = saturate(uBass);
+    float mid = saturate(uMid);
+    float treble = saturate(uTreble);
 
-    // Deformación según waveform
-    float audioDeform =
-        wave * (
-            0.045 +
-            uBass * 0.09
-        );
+    float beat = saturate(uBeat);
 
-    // Influencia del espectro
-    float spectrumDeform =
-        fft * (
-            0.025 +
-            uTreble * 0.035
-        );
+    // Audio modulation
+    float amplitude = 0.22 + bass * 0.48;
+    float speed = 0.7 + bass * 0.7;
 
-    // Respiración
-    float breathing =
-        sin(t * 1.5) * 0.015;
+    // Main directional waves
+    float h = 0.0;
 
-    breathing += uBeat * 0.035;
+    vec2 d1 = normalize(vec2(0.85, 0.48));
+    vec2 d2 = normalize(vec2(-0.55, 0.83));
+    vec2 d3 = normalize(vec2(0.25, 1.0));
 
-    // Radio final de la esfera
-    float orbRadius =
-        0.48 +
-        organic +
-        audioDeform +
-        spectrumDeform +
-        breathing;
+    float w1 = sin(dot(p, d1) * 2.4 - t * speed);
+    float w2 = sin(dot(p, d2) * 3.8 - t * 1.1);
+    float w3 = sin(dot(p, d3) * 6.0 - t * 1.6);
 
-    // Distancia a la superficie
-    float surfaceDist = radius - orbRadius;
+    h += w1 * amplitude;
+    h += w2 * (0.10 + mid * 0.19);
+    h += w3 * (0.035 + treble * 0.07);
 
-    // ----------------------------------------
-    // MÁSCARA DEL ORBE
-    // ----------------------------------------
+    // Secondary wave details
+    h += sin(p.x * 8.0 + p.y * 4.0 - t * 2.2)
+         * (0.025 + mid * 0.045);
 
-    float aa = fwidth(radius) * 1.5;
+    h += sin(p.x * 13.0 - p.y * 7.0 + t * 2.8)
+         * (0.012 + treble * 0.025);
 
-    float orbMask = 1.0 - smoothstep(
-        0.0 - aa,
-        0.012 + aa,
-        surfaceDist
+    // Spectrum-driven wave modulation
+    float freq = spectrum(fract(p.x * 0.09 + 0.5));
+    h += (freq - 0.25) * 0.12 * bass;
+
+    // Waveform ripples
+    float wave = waveform(fract(p.x * 0.06 + 0.5));
+    h += (wave - 0.5) * 0.12 * mid;
+
+    // Beat impulse
+    h += sin(length(p) * 3.0 - t * 3.0)
+         * beat * 0.12;
+
+    // Organic turbulence
+    float n = noise(p * 2.0 + t * 0.15);
+    h += (n - 0.5) * (0.035 + mid * 0.055);
+
+    return h;
+}
+
+// --------------------------------------------------
+// SURFACE NORMAL
+// --------------------------------------------------
+
+vec3 oceanNormal(vec2 p) {
+
+    float e = 0.008;
+
+    float hx = ocean(p + vec2(e, 0.0))
+             - ocean(p - vec2(e, 0.0));
+
+    float hy = ocean(p + vec2(0.0, e))
+             - ocean(p - vec2(0.0, e));
+
+    return normalize(vec3(-hx / (2.0 * e), 1.0,
+                          -hy / (2.0 * e)));
+}
+
+// --------------------------------------------------
+// MAIN
+// --------------------------------------------------
+
+void main() {
+
+    vec2 uv = vUv;
+
+    float aspect = uResolution.x / uResolution.y;
+
+    vec2 screen = uv - 0.5;
+    screen.x *= aspect;
+
+    float bass = saturate(uBass);
+    float mid = saturate(uMid);
+    float treble = saturate(uTreble);
+    float volume = saturate(uVolume);
+    float beat = saturate(uBeat);
+
+    float t = uTime;
+
+    // Sky gradient
+    vec3 skyTop = vec3(0.008, 0.018, 0.065);
+    vec3 skyBottom = vec3(0.025, 0.13, 0.24);
+
+    float skyGradient = smoothstep(-0.15, 0.48, screen.y);
+
+    vec3 sky = mix(skyBottom, skyTop, skyGradient);
+
+    // Dynamic horizon
+    float horizon = 0.08
+                  + 0.025 * sin(screen.x * 2.0 + t * 0.3)
+                  + bass * 0.035;
+
+    float oceanMask = 1.0 - smoothstep(
+        horizon - 0.012,
+        horizon + 0.012,
+        screen.y
     );
 
-    // ----------------------------------------
-    // TEXTURA LÍQUIDA INTERIOR
-    // ----------------------------------------
+    // Perspective depth mapping
+    float depth = max(0.0, horizon - screen.y);
 
-    vec2 liquidUV = uv;
+    float perspective = 1.0 / (0.22 + depth * 1.5);
 
-    // Distorsión animada
-    liquidUV.x += sin(uv.y * 7.0 + t) * 0.035;
-    liquidUV.y += cos(uv.x * 8.0 - t * 0.8) * 0.035;
+    vec2 p;
 
-    float n1 = noise(
-        liquidUV * 5.0 + vec2(t * 0.3, -t * 0.2)
+    p.x = screen.x * (1.0 + depth * 1.4);
+    p.y = depth * 3.0 + 0.12;
+
+    p *= perspective * 0.85;
+
+    // Ocean surface
+    float height = ocean(p);
+
+    // Finite-difference lighting
+    vec3 normal = oceanNormal(p);
+
+    vec3 lightDir = normalize(vec3(-0.45, 0.8, 0.55));
+
+    float diffuse = max(dot(normal, lightDir), 0.0);
+
+    // Reflection / Fresnel
+    vec3 viewDir = normalize(vec3(0.0, 0.55, 1.0));
+
+    float fresnel = pow(
+        1.0 - max(dot(normal, viewDir), 0.0),
+        3.0
     );
 
-    float n2 = noise(
-        liquidUV * 10.0 - vec2(t * 0.4, t * 0.25)
+    // Wave crest detection
+    float crest = smoothstep(
+        0.10,
+        0.48,
+        normal.x * 0.5 + normal.z * 0.5
     );
 
-    float n3 = noise(
-        liquidUV * 18.0 + vec2(-t * 0.2, t * 0.5)
+    float foam = pow(
+        saturate(1.0 - normal.y),
+        3.0
     );
 
-    float liquid =
-        n1 * 0.5 +
-        n2 * 0.3 +
-        n3 * 0.2;
+    // Ocean colors
+    vec3 deepOcean = vec3(0.005, 0.025, 0.09);
+    vec3 oceanBlue = vec3(0.015, 0.16, 0.34);
+    vec3 cyan = vec3(0.03, 0.55, 0.72);
+    vec3 lightCyan = vec3(0.30, 0.90, 1.0);
 
-    // Ondas de energía
-    float energy = sin(
-        radius * 30.0 -
-        t * 2.0 +
-        liquid * 5.0 +
-        fft * 5.0
+    float lighting = diffuse * 0.55 + 0.25;
+
+    vec3 water = mix(
+        deepOcean,
+        oceanBlue,
+        saturate(lighting + height * 0.4)
     );
 
-    energy = smoothstep(-0.5, 0.9, energy);
-
-    // ----------------------------------------
-    // PALETA DE COLORES
-    // ----------------------------------------
-
-    vec3 deepBlue = vec3(0.015, 0.035, 0.20);
-
-    vec3 cyan = vec3(0.02, 0.75, 1.0);
-
-    vec3 violet = vec3(0.45, 0.08, 1.0);
-
-    vec3 pink = vec3(1.0, 0.08, 0.55);
-
-    vec3 white = vec3(0.8, 0.95, 1.0);
-
-    // Gradiente de plasma
-    vec3 liquidColor = mix(
-        deepBlue,
-        violet,
-        smoothstep(0.15, 0.8, liquid)
-    );
-
-    liquidColor = mix(
-        liquidColor,
+    water = mix(
+        water,
         cyan,
-        smoothstep(0.35, 0.9, energy)
+        fresnel * 0.75
     );
 
-    liquidColor = mix(
-        liquidColor,
-        pink,
-        smoothstep(0.65, 0.95, n2) * 0.5
+    // Wave crests and foam
+    water += cyan * crest * (0.15 + treble * 0.4);
+    water += lightCyan * foam * (0.15 + volume * 0.6);
+
+    // Specular highlights
+    vec3 halfDir = normalize(lightDir + viewDir);
+
+    float specular = pow(
+        max(dot(normal, halfDir), 0.0),
+        42.0
     );
 
-    // Brillo de las frecuencias altas
-    liquidColor += cyan * fft * uTreble * 1.5;
+    water += vec3(0.35, 0.8, 1.0)
+             * specular
+             * (0.5 + treble + beat * 0.5);
 
-    // ----------------------------------------
-    // RELIEVE Y SUPERFICIE
-    // ----------------------------------------
+    // Depth fog
+    float fog = exp(-depth * 1.5);
 
-    float edgeLight = exp(-abs(surfaceDist) * 28.0);
-
-    float innerGlow = exp(-radius * 3.5);
-
-    float veins = pow(
-        abs(sin(liquid * 16.0 + n2 * 4.0)),
-        8.0
+    water = mix(
+        vec3(0.008, 0.035, 0.10),
+        water,
+        fog
     );
 
-    liquidColor += white * veins * 0.18;
+    // Audio energy glow
+    water += vec3(0.01, 0.12, 0.24)
+             * volume * (0.3 + fresnel);
 
-    // Oscurecer el interior para dar profundidad
-    liquidColor *= 0.55 + liquid * 0.8;
+    // Final composition
+    vec3 color = mix(sky, water, oceanMask);
 
-    // ----------------------------------------
-    // HALO EXTERIOR
-    // ----------------------------------------
-
-    float outerGlow = exp(
-        -max(surfaceDist, 0.0) * 13.0
+    // Horizon glow
+    float horizonGlow = exp(
+        -abs(screen.y - horizon) * 38.0
     );
 
-    outerGlow *= smoothstep(
-        0.0,
-        0.03,
-        surfaceDist
+    color += vec3(0.02, 0.18, 0.30)
+             * horizonGlow
+             * (0.25 + bass + beat);
+
+    // Beat flash
+    color += vec3(0.02, 0.12, 0.20)
+             * beat * 0.12 * oceanMask;
+
+    // Vignette
+    float vignette = 1.0 - 0.35 * dot(
+        screen / vec2(aspect, 1.0),
+        screen / vec2(aspect, 1.0)
     );
 
-    vec3 glowColor = mix(
-        cyan,
-        violet,
-        0.5 + 0.5 * sin(t + angle * 2.0)
-    );
+    color *= vignette;
 
-    // ----------------------------------------
-    // ILUMINACIÓN
-    // ----------------------------------------
-
-    vec2 lightDir = normalize(
-        vec2(-0.45, 0.65)
-    );
-
-    float highlight = pow(
-        max(dot(normalize(uv + vec2(0.001)), lightDir), 0.0),
-        8.0
-    );
-
-    float specular = highlight * 0.45;
-
-    liquidColor += white * specular;
-
-    // ----------------------------------------
-    // COMPOSICIÓN
-    // ----------------------------------------
-
-    vec3 color = vec3(0.0);
-
-    // Halo
-    color += glowColor * outerGlow * (
-        0.3 + uVolume * 1.5 + uBeat
-    );
-
-    // Cuerpo
-    color += liquidColor * orbMask;
-
-    // Borde luminoso
-    color += cyan * edgeLight * 0.45 * orbMask;
-
-    // Núcleo
-    color += violet * innerGlow *
-        (0.12 + uBass * 0.5) *
-        orbMask;
-
-    // Flash del beat
-    color *= 1.0 + uBeat * 0.8;
-
-    // Volumen general
-    color *= 0.65 + uVolume * 1.4;
-
-    // Viñeta
-    color *= exp(-radius * 0.75);
-
-    // Tonemapping
-    color = 1.0 - exp(-color * 1.3);
+    // Contrast and output
+    color = max(color, 0.0);
+    color = color / (1.0 + color * 0.35);
 
     gl_FragColor = vec4(color, 1.0);
 }

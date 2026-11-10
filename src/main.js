@@ -49,21 +49,21 @@ const controls = new PlayerControls(audio, queue, settings);
 
 const renderer = new Visualizer(
     audio,
-        shaders.spiral,
+//        shaders.spiral,
+//        shaders.tunnel,
 //        shaders.digitalocean,
-//        shaders.digitalocean2,
+//        shaders.plasma,
+        shaders.digitalocean2,
 //        shaders.livingorb2,
 
 
-//    shaders.livingorb,
+    //shaders.livingorb,
         //shaders.dualwaveform,
-    //    shaders.liquidorb,
+//        shaders.liquidorb,
 //   shaders.liquidorb2,
 //    shaders.dualoscy,
     
 //    shaders.galaxy,
-//        shaders.plasma,
-//        shaders.tunnel,
     shaders.fullscreen
 );
 
