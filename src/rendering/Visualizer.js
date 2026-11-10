@@ -86,8 +86,8 @@ export default class Visualizer {
 
         this.#waveformTexture =
             new THREE.DataTexture(
-                new Uint8Array(512),
-                512,
+                new Uint8Array(1024),
+                1024,
                 1,
                 THREE.RedFormat
             );
@@ -97,8 +97,8 @@ export default class Visualizer {
 
         this.#fftTexture =
             new THREE.DataTexture(
-                new Uint8Array(512),
-                512,
+                new Uint8Array(1024),
+                1024,
                 1,
                 THREE.RedFormat
             );
@@ -252,7 +252,7 @@ export default class Visualizer {
         this.#waveformTexture.image.data.set(
             this.#audio.waveform.subarray(
                 0,
-                512
+                1024
             )
         );
 
@@ -263,7 +263,7 @@ export default class Visualizer {
         this.#fftTexture.image.data.set(
             this.#audio.spectrum.subarray(
                 0,
-                512
+                1024
             )
         );
 
