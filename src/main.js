@@ -46,13 +46,13 @@ queue.repeat = true;
 const audio = new AudioAnalyzer();
 //await audio.load(queue.current.path);
 
-const controls = new PlayerControls(audio, queue);
+const controls = new PlayerControls(audio, queue, settings);
 
 
 const renderer = new Visualizer(
     audio,
-//    shaders.galaxy,
-        shaders.plasma,
+    shaders.galaxy,
+//        shaders.plasma,
 //        shaders.tunnel,
 //        shaders.spiral,
     shaders.fullscreen

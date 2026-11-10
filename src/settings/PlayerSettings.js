@@ -8,7 +8,6 @@ export default class PlayerSettings {
 
     // Configuración por defecto.
     static DEFAULT_SETTINGS = {
-
         // Ruta raíz de la biblioteca musical.
         musicPath: "",
         // Volumen inicial.
@@ -18,48 +17,36 @@ export default class PlayerSettings {
         // Modo repetición.
         repeat: false,
         // Shader seleccionado.
-        visualizer: "galaxy"
+        visualizer: "galaxy",
+        // Fecha del último escaneo de la biblioteca.
+        lastLibraryScan: null
     };
 
 
     // Configuración actualmente cargada.
     #settings;
 
-    #btnFolder;
-
     /**
      * Constructor.
      * Inicializa la configuración con los valores por defecto.
      */
     constructor() {
-
-        this.#settings =
-            structuredClone(
+        this.#settings = structuredClone(
                 PlayerSettings.DEFAULT_SETTINGS
             );
-
-        this.#btnFolder = document.getElementById("btn-select-folder");        
-        this.#btnFolder.addEventListener(
-            "click",
-            async () => this.selectFolder);
-
     }
 
     async selectFolder() {
         const path = await FolderSelector.selectFolder();
 
         if (!path) {
-            return;
+            return null;
         }
 
         this.#settings.musicPath = path;
-
         this.save();
-
-        console.log(
-            "Biblioteca:",
-            path
-        );        
+        console.log("Biblioteca:", path);
+        return path;
     }
 
     /**
@@ -71,18 +58,18 @@ export default class PlayerSettings {
      * @returns {Object}
      */
     load() {
-
-        const json =
-            localStorage.getItem(
+        try {
+            const json = localStorage.getItem(
                 PlayerSettings.STORAGE_KEY
             );
 
-        if (json) {
+            if (json) {
+                this.#settings = JSON.parse(json);
+            }
 
-            this.#settings =
-                JSON.parse(
-                    json
-                );
+        }
+        catch {
+            this.reset();
         }
 
         return this.#settings;
@@ -93,7 +80,6 @@ export default class PlayerSettings {
      * Guarda la configuración actual.
      */
     save() {
-
         localStorage.setItem(
             PlayerSettings.STORAGE_KEY,
 
@@ -111,11 +97,9 @@ export default class PlayerSettings {
      * a sus valores por defecto.
      */
     reset() {
-
-        this.#settings =
-            structuredClone(
-                PlayerSettings.DEFAULT_SETTINGS
-            );
+        this.#settings = structuredClone(
+            PlayerSettings.DEFAULT_SETTINGS
+        );
 
         this.save();
     }
@@ -133,14 +117,12 @@ export default class PlayerSettings {
      * Ruta raíz de la colección musical.
      */
     get musicPath() {
-
         return this.#settings.musicPath;
     }
 
     set musicPath(value) {
-
-        this.#settings.musicPath =
-            value;
+        this.#settings.musicPath = value;
+        this.save();
     }
 
 
@@ -149,20 +131,12 @@ export default class PlayerSettings {
      * Rango: 0.0 - 1.0
      */
     get volume() {
-
         return this.#settings.volume;
     }
 
     set volume(value) {
-
-        this.#settings.volume =
-            Math.max(
-                0,
-                Math.min(
-                    1,
-                    value
-                )
-            );
+        this.#settings.volume = Math.max(0, Math.min(1, value));
+        this.save();
     }
 
 
@@ -170,14 +144,12 @@ export default class PlayerSettings {
      * Estado del modo aleatorio.
      */
     get shuffle() {
-
         return this.#settings.shuffle;
     }
 
     set shuffle(value) {
-
-        this.#settings.shuffle =
-            Boolean(value);
+        this.#settings.shuffle = Boolean(value);
+        this.save();
     }
 
 
@@ -185,14 +157,12 @@ export default class PlayerSettings {
      * Estado del modo repetición.
      */
     get repeat() {
-
         return this.#settings.repeat;
     }
 
     set repeat(value) {
-
-        this.#settings.repeat =
-            Boolean(value);
+        this.#settings.repeat = Boolean(value);
+        this.save();
     }
 
 
@@ -200,13 +170,11 @@ export default class PlayerSettings {
      * Shader seleccionado actualmente.
      */
     get visualizer() {
-
         return this.#settings.visualizer;
     }
 
     set visualizer(value) {
-
-        this.#settings.visualizer =
-            value;
+        this.#settings.visualizer = value;
+        this.save();
     }
 }

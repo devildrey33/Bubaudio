@@ -6,6 +6,8 @@ export default class PlayerControls {
     // Cola de reproducción
     #queue;
 
+    // Preferencias a los ajustes
+    #settings;
 
     // Botones
     #btnPlay;
@@ -16,6 +18,7 @@ export default class PlayerControls {
 
     #btnNext;
 
+    #btnFolder
 
     // Controles de progreso
     #progressBar;
@@ -26,17 +29,20 @@ export default class PlayerControls {
 
     #totalTime;
 
+    
 
     /**
      * Constructor.
      *
      * @param {AudioAnalyzer} audio
      * @param {PlaybackQueue} queue
+     * @param {Settings} settings
      */
-    constructor(audio, queue) {
+    constructor(audio, queue, settings) {
 
         this.#queue = queue;
         this.#audio = audio;
+        this.#settings = settings;
         this.#cacheDom();
 
         this.#registerEvents();
@@ -49,46 +55,16 @@ export default class PlayerControls {
      * Obtiene las referencias a los elementos HTML.
      */
     #cacheDom() {
+        this.#btnPlay = document.getElementById("btn-play");
+        this.#btnStop = document.getElementById("btn-stop");
+        this.#btnPrev = document.getElementById("btn-prev");
+        this.#btnNext = document.getElementById("btn-next");
+        this.#progressBar = document.getElementById("progress-bar");
+        this.#volumeBar = document.getElementById("volume-bar");
+        this.#currentTime = document.getElementById("current-time");
+        this.#totalTime = document.getElementById("total-time");
+        this.#btnFolder = document.getElementById("btn-select-folder");        
 
-        this.#btnPlay =
-            document.getElementById(
-                "btn-play"
-            );
-
-        this.#btnStop =
-            document.getElementById(
-                "btn-stop"
-            );
-
-        this.#btnPrev =
-            document.getElementById(
-                "btn-prev"
-            );
-
-        this.#btnNext =
-            document.getElementById(
-                "btn-next"
-            );
-
-        this.#progressBar =
-            document.getElementById(
-                "progress-bar"
-            );
-
-        this.#volumeBar =
-            document.getElementById(
-                "volume-bar"
-            );
-
-        this.#currentTime =
-            document.getElementById(
-                "current-time"
-            );
-
-        this.#totalTime =
-            document.getElementById(
-                "total-time"
-            );
     }
 
 
@@ -126,6 +102,11 @@ export default class PlayerControls {
             "input",
             () => this.#onVolume()
         );
+
+        this.#btnFolder.addEventListener(
+            "click",
+            async () => this.#settings.selectFolder());
+
     }
 
 
