@@ -1,26 +1,26 @@
 import {
-    readDir
+    readDir,
+    readTextFile,
+    writeTextFile,
+    mkdir,
+    BaseDirectory
 }
 from "@tauri-apps/plugin-fs";
 
 
 export default class LibraryIndexer {
 
+    // Nombre del fichero de índice.
+    static LIBRARY_FILE = "library.json";
+
     // Formatos de audio soportados.
     static SUPPORTED_FORMATS = [
-
         "mp3",
-
         "flac",
-
         "ogg",
-
         "opus",
-
         "wav",
-
         "m4a",
-
         "aac"
     ];
 
@@ -56,13 +56,10 @@ export default class LibraryIndexer {
      * @param {String} musicPath
      */
     async scan(musicPath) {
-
-        this.#musicPath =
-            musicPath;
-
+        this.#musicPath = musicPath;
         this.clear();
-
         await this.#scanArtists();
+        await this.save();
     }
 
 
@@ -70,11 +67,8 @@ export default class LibraryIndexer {
      * Elimina todo el contenido indexado.
      */
     clear() {
-
         this.#artists = [];
-
         this.#albums = [];
-
         this.#tracks = [];
     }
 
@@ -85,33 +79,19 @@ export default class LibraryIndexer {
      * Cada carpeta representa un grupo.
      */
     async #scanArtists() {
+        const artists = await readDir(this.#musicPath);
 
-        const artists =
-            await readDir(
-                this.#musicPath
-            );
 
-        for (
-            const artist
-            of artists
-        ) {
+        for (const artist of artists) {
 
-            if (
-                !artist.isDirectory
-            ) {
+            if (!artist.isDirectory) {
                 continue;
             }
 
             const artistData = {
-
-                id:
-                    crypto.randomUUID(),
-
-                name:
-                    artist.name,
-
-                path:
-                    artist.path
+                id   : crypto.randomUUID(),
+                name : artist.name,
+                path : `${this.#musicPath}\\${artist.name}`
             };
 
             this.addArtist(
@@ -134,51 +114,33 @@ export default class LibraryIndexer {
      */
     async #scanAlbums(artist) {
 
-        const albums =
-            await readDir(
-                artist.path
-            );
+        const albums = await readDir(artist.path);
 
-        for (
-            const album
-            of albums
-        ) {
+        for (const album of albums) {
 
-            if (
-                !album.isDirectory
-            ) {
+            if (!album.isDirectory) {
                 continue;
             }
 
+            const albumPath = `${artist.path}\\${album.name}`;
+
             const albumData = {
-
-                id:
-                    crypto.randomUUID(),
-
-                artist:
-                    artist.name,
-
-                title:
-                    album.name,
-
-                path:
-                    album.path,
-
-                tracks: []
+                id     : crypto.randomUUID(),
+                artist : artist.name,
+                title  : album.name,
+                path   : albumPath,
+                tracks : []
             };
 
-            this.addAlbum(
-                albumData
-            );
+            this.addAlbum(albumData);
 
             await this.#scanAlbumFiles(
                 artist,
                 albumData,
-                album.path
+                albumPath
             );
         }
     }
-
 
     /**
      * Escaneo recursivo dentro de un disco.
@@ -190,60 +152,36 @@ export default class LibraryIndexer {
      * @param {Object} album
      * @param {String} currentPath
      */
-    async #scanAlbumFiles(
-        artist,
-        album,
-        currentPath
-    ) {
+    async #scanAlbumFiles(artist, album, currentPath) {
 
-        const entries =
-            await readDir(
-                currentPath
-            );
+        const entries = await readDir(currentPath);
 
-        for (
-            const entry
-            of entries
-        ) {
+        for (const entry of entries) {
 
-            // Seguir descendiendo por las carpetas.
-            if (
-                entry.isDirectory
-            ) {
+            const entryPath = `${currentPath}\\${entry.name}`;
 
+            if (entry.isDirectory) {
                 await this.#scanAlbumFiles(
                     artist,
                     album,
-                    entry.path
+                    entryPath
                 );
-
                 continue;
             }
 
-            // Ignorar formatos no soportados.
-            if (
-                !this.#isSupportedFile(
-                    entry.name
-                )
-            ) {
+            if (!this.#isSupportedFile(entry.name)) {
                 continue;
             }
 
-            const track =
-                this.#createTrack(
-                    artist,
-                    album,
-                    entry
-                );
-
-            // Guardar referencia en el álbum.
-            album.tracks.push(
-                track.id
+            const track = this.#createTrack(
+                artist,
+                album,
+                entry,
+                entryPath
             );
 
-            this.addTrack(
-                track
-            );
+            album.tracks.push(track.id);
+            this.addTrack(track);
         }
     }
 
@@ -257,53 +195,26 @@ export default class LibraryIndexer {
      *
      * @returns {Object}
      */
-    #createTrack(
-        artist,
-        album,
-        file
-    ) {
-
-        const extension =
-            file.name
-                .split(".")
-                .pop()
-                ?.toLowerCase();
-
-        const title =
-            file.name.replace(
-                /\.[^.]+$/,
-                ""
-            );
+    #createTrack(artist, album, file) {
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        const title = file.name.replace(/\.[^.]+$/, "");
 
         return {
-
             // Identificador único.
-            id:
-                crypto.randomUUID(),
-
+            id      : crypto.randomUUID(),
             // Datos obtenidos de la estructura
             // de directorios.
-            artist:
-                artist.name,
-
-            album:
-                album.title,
-
+            artist  : artist.name,
+            album   : album.title,
             // De momento usamos el nombre
             // del fichero.
             title,
-
             // Futuro soporte para tags.
-            genre:
-                null,
-
+            genre   : null,
             // Ruta completa.
-            path:
-                file.path,
-
+            path    : file.path,
             // Formato detectado.
-            format:
-                extension
+            format  : extension
         };
     }
 
@@ -316,20 +227,8 @@ export default class LibraryIndexer {
      * @returns {Boolean}
      */
     #isSupportedFile(fileName) {
-
-        const extension =
-            fileName
-                .split(".")
-                .pop()
-                ?.toLowerCase();
-
-        return (
-            LibraryIndexer
-                .SUPPORTED_FORMATS
-                .includes(
-                    extension
-                )
-        );
+        const extension = fileName.split(".").pop()?.toLowerCase();
+        return (LibraryIndexer.SUPPORTED_FORMATS.includes(extension));
     }
 
 
@@ -339,7 +238,6 @@ export default class LibraryIndexer {
      * @param {Object} artist
      */
     addArtist(artist) {
-
         this.#artists.push(
             artist
         );
@@ -352,7 +250,6 @@ export default class LibraryIndexer {
      * @param {Object} album
      */
     addAlbum(album) {
-
         this.#albums.push(
             album
         );
@@ -365,10 +262,7 @@ export default class LibraryIndexer {
      * @param {Object} track
      */
     addTrack(track) {
-
-        this.#tracks.push(
-            track
-        );
+        this.#tracks.push(track);
     }
 
 
@@ -376,18 +270,12 @@ export default class LibraryIndexer {
      * Devuelve un grupo aleatorio.
      */
     randomArtist() {
-
-        if (
-            this.#artists.length === 0
-        ) {
+        if (this.#artists.length === 0) {
             return null;
         }
 
         return this.#artists[
-            Math.floor(
-                Math.random() *
-                this.#artists.length
-            )
+            Math.floor(Math.random() * this.#artists.length)
         ];
     }
 
@@ -417,9 +305,7 @@ export default class LibraryIndexer {
      */
     randomTrack() {
 
-        if (
-            this.#tracks.length === 0
-        ) {
+        if (this.#tracks.length === 0) {
             return null;
         }
 
@@ -436,7 +322,6 @@ export default class LibraryIndexer {
      * Lista de grupos.
      */
     get artists() {
-
         return this.#artists;
     }
 
@@ -445,7 +330,6 @@ export default class LibraryIndexer {
      * Lista de discos.
      */
     get albums() {
-
         return this.#albums;
     }
 
@@ -454,7 +338,6 @@ export default class LibraryIndexer {
      * Lista de canciones.
      */
     get tracks() {
-
         return this.#tracks;
     }
 
@@ -463,7 +346,6 @@ export default class LibraryIndexer {
      * Número de grupos indexados.
      */
     get artistCount() {
-
         return this.#artists.length;
     }
 
@@ -472,7 +354,6 @@ export default class LibraryIndexer {
      * Número de discos indexados.
      */
     get albumCount() {
-
         return this.#albums.length;
     }
 
@@ -481,7 +362,119 @@ export default class LibraryIndexer {
      * Número de canciones indexadas.
      */
     get trackCount() {
-
         return this.#tracks.length;
     }
+
+
+    /**
+     * Guarda la biblioteca indexada en AppData.
+     */
+    async save() {
+        const library = {
+            version     : 1,
+            musicPath   : this.#musicPath,
+            scanDate    : new Date().toISOString(),
+
+            artists     : this.#artists,
+            albums      : this.#albums,
+            tracks      : this.#tracks
+        };
+
+        await mkdir(".", {
+            baseDir  : BaseDirectory.AppData,
+            recursive: true
+        }
+    );        
+        await writeTextFile(
+            LibraryIndexer.LIBRARY_FILE,
+            JSON.stringify(library, null, 4), {
+                baseDir : BaseDirectory.AppData
+            }
+        );
+    }
+
+
+    /**
+     * Carga la biblioteca desde AppData.
+     */
+    async load() {
+
+        const json = await readTextFile(
+            LibraryIndexer.LIBRARY_FILE, {
+                baseDir : BaseDirectory.AppData
+            }
+        );
+
+        const library = JSON.parse(json);
+
+        this.#musicPath = library.musicPath ?? "";
+        this.#artists   = library.artists   ?? [];
+        this.#albums    = library.albums    ?? [];
+        this.#tracks    = library.tracks    ?? [];
+
+        return library;
+    }
+
+        
+    /**
+     * Devuelve todas las canciones de un disco.
+     *
+     * @param {String} albumId
+     * @returns {Array}
+     */
+    getAlbumTracks(albumId) {
+        const album = this.#albums.find(
+            album => album.id === albumId
+        );
+
+        if (!album) {
+            return [];
+        }
+
+        return this.#tracks.filter(track => album.tracks.includes(track.id));
+    }
+
+
+    /**
+     * Devuelve todas las canciones de un artista.
+     *
+     * @param {String} artistId
+     * @returns {Array}
+     */
+    getArtistTracks(artistId) {
+
+        const artist = this.#artists.find(
+            artist => artist.id === artistId
+        );
+
+        if (!artist) {
+            return [];
+        }
+
+        return this.#tracks.filter(
+            track => track.artist === artist.name
+        );
+    }    
+
+
+    /**
+     * Devuelve todos los álbumes de un artista.
+     *
+     * @param {String} artistId
+     * @returns {Array}
+     */
+    getArtistAlbums(artistId) {
+
+        const artist = this.#artists.find(
+            artist => artist.id === artistId
+        );
+
+        if (!artist) {
+            return [];
+        }
+
+        return this.#albums.filter(
+            album => album.artist === artist.name
+        );
+    }    
 }

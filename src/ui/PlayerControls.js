@@ -114,18 +114,13 @@ export default class PlayerControls {
      * Alterna entre Play y Pause.
      */
     async #onPlayPause() {
-
         await this.#audio.resume();
-
-        if (
-            this.#audio.isPlaying
-        ) {
+        if (this.#audio.isPlaying) {
             this.#audio.pause();
         }
         else {
             this.#audio.play();
         }
-
         this.#updatePlayButton();
     }
 
@@ -134,11 +129,8 @@ export default class PlayerControls {
      * Detiene la reproducción.
      */
     #onStop() {
-
         this.#audio.stop();
-
         this.#progressBar.value = 0;
-
         this.#updatePlayButton();
     }
 
@@ -147,13 +139,8 @@ export default class PlayerControls {
      * Canción anterior.
      */
     async #onPrevious() {
-
-        const track =
-            this.#queue.previous();
-
-        await this.#loadTrack(
-            track
-        );
+        const track = this.#queue.previous();
+        await this.#loadTrack(track);
     }
 
 
@@ -161,13 +148,8 @@ export default class PlayerControls {
      * Canción siguiente.
      */
     async #onNext() {
-
-        const track =
-            this.#queue.next();
-
-        await this.#loadTrack(
-            track
-        );
+        const track = this.#queue.next();
+        await this.#loadTrack(track);
     }
 
 
@@ -176,23 +158,15 @@ export default class PlayerControls {
      */
     #onSeek() {
 
-        const duration =
-            this.#audio.duration;
+        const duration = this.#audio.duration;
 
         if (duration <= 0) {
             return;
         }
 
-        const position =
-            duration *
-            (
-                this.#progressBar.value /
-                100
-            );
+        const position = duration * (this.#progressBar.value / 100);
 
-        this.#audio.seek(
-            position
-        );
+        this.#audio.seek(position);
     }
 
 
@@ -200,10 +174,7 @@ export default class PlayerControls {
      * Cambia el volumen.
      */
     #onVolume() {
-
-        this.#audio.volumeLevel =
-            this.#volumeBar.value /
-            100;
+        this.#audio.volumeLevel = this.#volumeBar.value / 100;
     }
 
 
@@ -234,16 +205,8 @@ export default class PlayerControls {
      * Actualiza el icono Play/Pause.
      */
     #updatePlayButton() {
-
-        const icon =
-            this.#btnPlay.querySelector(
-                ".icon-play"
-            );
-
-        icon.textContent =
-            this.#audio.isPlaying
-                ? "⏸"
-                : "▶";
+        const icon = this.#btnPlay.querySelector(".icon-play");
+        icon.textContent = this.#audio.isPlaying ? "⏸" : "▶";
     }
 
 
@@ -252,12 +215,8 @@ export default class PlayerControls {
      * de los botones Previous y Next.
      */
     #updateNavigationButtons() {
-
-        this.#btnPrev.disabled =
-            !this.#queue.hasPrevious?.();
-
-        this.#btnNext.disabled =
-            !this.#queue.hasNext?.();
+        this.#btnPrev.disabled = !this.#queue.hasPrevious?.();
+        this.#btnNext.disabled = !this.#queue.hasNext?.();
     }
 
 
@@ -268,32 +227,15 @@ export default class PlayerControls {
      * @returns {String}
      */
     #formatTime(seconds) {
-
-        if (
-            Number.isNaN(seconds)
-        ) {
+        if (Number.isNaN(seconds)) {
             return "00:00";
         }
 
-        const minutes =
-            Math.floor(
-                seconds / 60
-            );
+        const minutes = Math.floor(seconds / 60);
 
-        const secs =
-            Math.floor(
-                seconds % 60
-            );
-
-        return (
-            String(minutes)
-                .padStart(2, "0")
-            +
-            ":"
-            +
-            String(secs)
-                .padStart(2, "0")
-        );
+        const secs = Math.floor(seconds % 60);
+        // Devuelve minutos y segundos con dos dígitos, separados por dos puntos.
+        return (String(minutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0"));
     }
 
 
@@ -303,38 +245,22 @@ export default class PlayerControls {
      * Se ejecuta una vez por frame.
      */
     #update() {
-
-        const current =
-            this.#audio.currentTime;
-
-        const duration =
-            this.#audio.duration;
+        const current = this.#audio.currentTime;
+        const duration = this.#audio.duration;
 
         if (duration > 0) {
 
-            this.#progressBar.value =
-                (
-                    current /
-                    duration
-                ) * 100;
+            this.#progressBar.value = (current / duration) * 100;
         }
 
-        this.#currentTime.textContent =
-            this.#formatTime(
-                current
-            );
+        this.#currentTime.textContent = this.#formatTime(current);
 
-        this.#totalTime.textContent =
-            this.#formatTime(
-                duration
-            );
+        this.#totalTime.textContent = this.#formatTime(duration);
 
         this.#updatePlayButton();
 
         this.#updateNavigationButtons();
 
-        requestAnimationFrame(
-            () => this.#update()
-        );
+        requestAnimationFrame(() => this.#update());
     }
 }

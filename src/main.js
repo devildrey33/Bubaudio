@@ -8,7 +8,6 @@ import PlayerSettings from "./settings/PlayerSettings.js";
 import LibraryIndexer from "./libraryindexer/LibraryIndexer.js";
 import PlaybackQueue from "./playlist/PlaybackQueue.js";
 
-
 // Cargo las opciones
 const settings = new PlayerSettings();
 settings.load();
@@ -27,7 +26,6 @@ settings.shuffle = true;
 settings.save();*/
 
 const library = new LibraryIndexer();
-//await library.scan(settings.musicPath);
 
 
 // Inicio la lista
@@ -64,3 +62,16 @@ await audio.load(testMp3);
 
 await audio.resume();
 audio.play();
+
+
+//await library.scan("c:\\Jocs");
+try {
+    await library.load();
+    console.log("Biblioteca cargada desde AppData :" + library.artistCount + " artistas, " + library.albumCount + " álbumes" + ", " + library.trackCount + " canciones");
+}
+catch {
+    console.log("Escaneando biblioteca musical...");
+    await library.scan(settings.musicPath);
+    await library.save();
+    console.log("Biblioteca escaneada y guardada :" + library.artistCount + " artistas, " + library.albumCount + " álbumes" + ", " + library.trackCount + " canciones");
+}
