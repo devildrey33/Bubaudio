@@ -113,7 +113,7 @@ Actualmente BubAudio detecta:
 
 ## Capturas
 
-Próximamente.
+![Bubaudio1](docs/Bubaudio1.png)
 
 ---
 
