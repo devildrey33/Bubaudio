@@ -125,6 +125,6 @@ BubAudio nace como un reproductor orientado a usuarios que mantienen grandes col
 
 ## Licencia
 
-Proyecto en desarrollo.
+Este proyecto está distribuido bajo los términos de la Mozilla Public License 2.0 (MPL-2.0).
 
-Licencia pendiente de definir.
+Consulta el archivo LICENSE para más información.
