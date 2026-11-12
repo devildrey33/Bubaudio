@@ -195,7 +195,7 @@ export default class LibraryIndexer {
      *
      * @returns {Object}
      */
-    #createTrack(artist, album, file) {
+    #createTrack(artist, album, file, path) {
         const extension = file.name.split(".").pop()?.toLowerCase();
         const title = file.name.replace(/\.[^.]+$/, "");
 
@@ -212,7 +212,7 @@ export default class LibraryIndexer {
             // Futuro soporte para tags.
             genre   : null,
             // Ruta completa.
-            path    : file.path,
+            path,
             // Formato detectado.
             format  : extension
         };

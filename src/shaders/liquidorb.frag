@@ -19,11 +19,12 @@ uniform sampler2D uWaveform;
 
 #define PI 3.14159265359
 
-// --------------------------------------------------
-// UTILITIES
-// --------------------------------------------------
+// ==================================================
+// DIGITAL OCEAN 2.0
+// GERSTNER WAVES
+// ==================================================
 
-float saturate(float x) {
+float sat(float x) {
     return clamp(x, 0.0, 1.0);
 }
 
@@ -46,10 +47,6 @@ float noise(vec2 p) {
     );
 }
 
-// --------------------------------------------------
-// AUDIO
-// --------------------------------------------------
-
 float spectrum(float x) {
     return texture2D(
         uSpectrum,
@@ -64,88 +61,159 @@ float waveform(float x) {
     ).r;
 }
 
-// --------------------------------------------------
-// OCEAN WAVE FIELD
-// --------------------------------------------------
+// ==================================================
+// AUDIO RESPONSE
+// ==================================================
 
-float ocean(vec2 p) {
+float bass;
+float mid;
+float treble;
+float volume;
+float beat;
+
+void initializeAudio() {
+    bass = sat(uBass);
+    mid = sat(uMid);
+    treble = sat(uTreble);
+    volume = sat(uVolume);
+    beat = sat(uBeat);
+}
+
+// ==================================================
+// GERSTNER WAVE FIELD
+// ==================================================
+
+float oceanHeight(vec2 p, out float foamSignal) {
 
     float t = uTime;
 
-    float bass = saturate(uBass);
-    float mid = saturate(uMid);
-    float treble = saturate(uTreble);
+    float height = 0.0;
+    vec2 displacement = vec2(0.0);
 
-    float beat = saturate(uBeat);
+    foamSignal = 0.0;
 
-    // Audio modulation
-    float amplitude = 0.22 + bass * 0.48;
-    float speed = 0.7 + bass * 0.7;
+    // Main wave directions
+    vec2 d1 = normalize(vec2(0.85, 0.45));
+    vec2 d2 = normalize(vec2(-0.65, 0.76));
+    vec2 d3 = normalize(vec2(0.30, 1.0));
+    vec2 d4 = normalize(vec2(-0.95, 0.20));
+    vec2 d5 = normalize(vec2(0.65, -0.70));
 
-    // Main directional waves
-    float h = 0.0;
+    // Audio-driven amplitudes
+    float A1 = 0.27 + bass * 0.42;
+    float A2 = 0.14 + mid * 0.20;
+    float A3 = 0.075 + treble * 0.10;
+    float A4 = 0.055 + mid * 0.08;
+    float A5 = 0.035 + treble * 0.045;
 
-    vec2 d1 = normalize(vec2(0.85, 0.48));
-    vec2 d2 = normalize(vec2(-0.55, 0.83));
-    vec2 d3 = normalize(vec2(0.25, 1.0));
+    // Wave frequencies
+    float K1 = 2.0;
+    float K2 = 3.3;
+    float K3 = 5.5;
+    float K4 = 8.0;
+    float K5 = 12.0;
 
-    float w1 = sin(dot(p, d1) * 2.4 - t * speed);
-    float w2 = sin(dot(p, d2) * 3.8 - t * 1.1);
-    float w3 = sin(dot(p, d3) * 6.0 - t * 1.6);
+    // Gerstner horizontal displacement
+    float Q1 = 0.85 + bass * 0.35;
+    float Q2 = 0.65 + mid * 0.25;
+    float Q3 = 0.45 + treble * 0.20;
+    float Q4 = 0.30;
+    float Q5 = 0.20;
 
-    h += w1 * amplitude;
-    h += w2 * (0.10 + mid * 0.19);
-    h += w3 * (0.035 + treble * 0.07);
+    // Initial phases
+    float P1 = dot(p, d1) * K1 - t * 1.0;
+    float P2 = dot(p, d2) * K2 - t * 1.35;
+    float P3 = dot(p, d3) * K3 - t * 1.75;
+    float P4 = dot(p, d4) * K4 - t * 2.1;
+    float P5 = dot(p, d5) * K5 - t * 2.7;
 
-    // Secondary wave details
-    h += sin(p.x * 8.0 + p.y * 4.0 - t * 2.2)
-         * (0.025 + mid * 0.045);
+    // Horizontal orbital displacement
+    displacement += d1 * Q1 * A1 * cos(P1);
+    displacement += d2 * Q2 * A2 * cos(P2);
+    displacement += d3 * Q3 * A3 * cos(P3);
+    displacement += d4 * Q4 * A4 * cos(P4);
+    displacement += d5 * Q5 * A5 * cos(P5);
 
-    h += sin(p.x * 13.0 - p.y * 7.0 + t * 2.8)
-         * (0.012 + treble * 0.025);
+    // Approximate inverse Gerstner mapping
+    vec2 q = p - displacement;
 
-    // Spectrum-driven wave modulation
-    float freq = spectrum(fract(p.x * 0.09 + 0.5));
-    h += (freq - 0.25) * 0.12 * bass;
+    // Recalculate phases on displaced surface
+    P1 = dot(q, d1) * K1 - t * 1.0;
+    P2 = dot(q, d2) * K2 - t * 1.35;
+    P3 = dot(q, d3) * K3 - t * 1.75;
+    P4 = dot(q, d4) * K4 - t * 2.1;
+    P5 = dot(q, d5) * K5 - t * 2.7;
 
-    // Waveform ripples
-    float wave = waveform(fract(p.x * 0.06 + 0.5));
-    h += (wave - 0.5) * 0.12 * mid;
+    // Vertical displacement
+    float s1 = sin(P1);
+    float s2 = sin(P2);
+    float s3 = sin(P3);
+    float s4 = sin(P4);
+    float s5 = sin(P5);
 
-    // Beat impulse
-    h += sin(length(p) * 3.0 - t * 3.0)
-         * beat * 0.12;
+    height += A1 * s1;
+    height += A2 * s2;
+    height += A3 * s3;
+    height += A4 * s4;
+    height += A5 * s5;
 
-    // Organic turbulence
-    float n = noise(p * 2.0 + t * 0.15);
-    h += (n - 0.5) * (0.035 + mid * 0.055);
+    // Sharpen wave crests
+    float sharp1 = pow(max(s1, 0.0), 12.0);
+    float sharp2 = pow(max(s2, 0.0), 10.0);
+    float sharp3 = pow(max(s3, 0.0), 8.0);
 
-    return h;
+    foamSignal += sharp1 * 0.65;
+    foamSignal += sharp2 * 0.35;
+    foamSignal += sharp3 * 0.20;
+
+    // Additional organic turbulence
+    float n = noise(q * 2.5 + t * 0.15);
+    height += (n - 0.5) * (0.06 + mid * 0.08);
+
+    // Spectrum modulation
+    float freq = spectrum(fract(q.x * 0.035 + 0.5));
+    height += (freq - 0.25) * bass * 0.16;
+
+    // Waveform modulation
+    float wave = waveform(fract(q.x * 0.025 + 0.5));
+    height += (wave - 0.5) * mid * 0.12;
+
+    // Beat-generated traveling wave
+    height += sin(length(q) * 2.8 - t * 3.0)
+              * beat * 0.17;
+
+    foamSignal += beat * 0.15 * sharp1;
+
+    return height;
 }
 
-// --------------------------------------------------
+// ==================================================
 // SURFACE NORMAL
-// --------------------------------------------------
+// ==================================================
 
 vec3 oceanNormal(vec2 p) {
 
-    float e = 0.008;
+    float e = 0.006;
 
-    float hx = ocean(p + vec2(e, 0.0))
-             - ocean(p - vec2(e, 0.0));
+    float f;
+    float h1 = oceanHeight(p + vec2(e, 0.0), f);
+    float h2 = oceanHeight(p - vec2(e, 0.0), f);
+    float h3 = oceanHeight(p + vec2(0.0, e), f);
+    float h4 = oceanHeight(p - vec2(0.0, e), f);
 
-    float hy = ocean(p + vec2(0.0, e))
-             - ocean(p - vec2(0.0, e));
+    float dx = (h1 - h2) / (2.0 * e);
+    float dy = (h3 - h4) / (2.0 * e);
 
-    return normalize(vec3(-hx / (2.0 * e), 1.0,
-                          -hy / (2.0 * e)));
+    return normalize(vec3(-dx, 1.0, -dy));
 }
 
-// --------------------------------------------------
-// MAIN
-// --------------------------------------------------
+// ==================================================
+// MAIN RENDER
+// ==================================================
 
 void main() {
+
+    initializeAudio();
 
     vec2 uv = vUv;
 
@@ -154,149 +222,197 @@ void main() {
     vec2 screen = uv - 0.5;
     screen.x *= aspect;
 
-    float bass = saturate(uBass);
-    float mid = saturate(uMid);
-    float treble = saturate(uTreble);
-    float volume = saturate(uVolume);
-    float beat = saturate(uBeat);
+    // ----------------------------------------------
+    // SKY
+    // ----------------------------------------------
 
-    float t = uTime;
+    float horizon = 0.095
+                  + sin(screen.x * 2.0 + uTime * 0.3) * 0.015
+                  + bass * 0.025;
 
-    // Sky gradient
-    vec3 skyTop = vec3(0.008, 0.018, 0.065);
+    vec3 skyTop = vec3(0.004, 0.012, 0.045);
     vec3 skyBottom = vec3(0.025, 0.13, 0.24);
 
-    float skyGradient = smoothstep(-0.15, 0.48, screen.y);
+    float skyMix = smoothstep(-0.05, 0.48, screen.y);
 
-    vec3 sky = mix(skyBottom, skyTop, skyGradient);
+    vec3 sky = mix(skyBottom, skyTop, skyMix);
 
-    // Dynamic horizon
-    float horizon = 0.08
-                  + 0.025 * sin(screen.x * 2.0 + t * 0.3)
-                  + bass * 0.035;
+    // ----------------------------------------------
+    // PERSPECTIVE OCEAN
+    // ----------------------------------------------
+
+    float depth = max(0.0, horizon - screen.y);
 
     float oceanMask = 1.0 - smoothstep(
-        horizon - 0.012,
-        horizon + 0.012,
+        horizon - 0.008,
+        horizon + 0.008,
         screen.y
     );
 
-    // Perspective depth mapping
-    float depth = max(0.0, horizon - screen.y);
+    // Perspective exaggeration
+    float perspective = 1.0 + depth * 3.5;
 
-    float perspective = 1.0 / (0.22 + depth * 1.5);
+    vec2 p = vec2(
+        screen.x * perspective * 1.6,
+        depth * 4.0 + 0.25
+    );
 
-    vec2 p;
+    // Slightly rotate wave field
+    float angle = 0.12;
 
-    p.x = screen.x * (1.0 + depth * 1.4);
-    p.y = depth * 3.0 + 0.12;
+    p = mat2(
+        cos(angle), -sin(angle),
+        sin(angle), cos(angle)
+    ) * p;
 
-    p *= perspective * 0.85;
+    // ----------------------------------------------
+    // SURFACE
+    // ----------------------------------------------
 
-    // Ocean surface
-    float height = ocean(p);
+    float foamSignal;
 
-    // Finite-difference lighting
+    float height = oceanHeight(p, foamSignal);
+
     vec3 normal = oceanNormal(p);
 
-    vec3 lightDir = normalize(vec3(-0.45, 0.8, 0.55));
+    vec3 lightDir = normalize(vec3(-0.5, 0.8, 0.45));
+    vec3 viewDir = normalize(vec3(0.0, 0.45, 1.0));
 
     float diffuse = max(dot(normal, lightDir), 0.0);
-
-    // Reflection / Fresnel
-    vec3 viewDir = normalize(vec3(0.0, 0.55, 1.0));
 
     float fresnel = pow(
         1.0 - max(dot(normal, viewDir), 0.0),
         3.0
     );
 
-    // Wave crest detection
+    // ----------------------------------------------
+    // WAVE CRESTS
+    // ----------------------------------------------
+
+    float slope = length(normal.xz);
+
     float crest = smoothstep(
-        0.10,
-        0.48,
-        normal.x * 0.5 + normal.z * 0.5
+        0.35,
+        1.45,
+        slope
     );
 
-    float foam = pow(
-        saturate(1.0 - normal.y),
-        3.0
+    float foam = smoothstep(
+        0.30,
+        0.85,
+        foamSignal
     );
 
-    // Ocean colors
-    vec3 deepOcean = vec3(0.005, 0.025, 0.09);
-    vec3 oceanBlue = vec3(0.015, 0.16, 0.34);
-    vec3 cyan = vec3(0.03, 0.55, 0.72);
-    vec3 lightCyan = vec3(0.30, 0.90, 1.0);
+    // Animated foam texture
+    float foamNoise = noise(
+        p * 12.0 + vec2(uTime * 0.7, -uTime * 0.4)
+    );
 
-    float lighting = diffuse * 0.55 + 0.25;
+    foam *= smoothstep(0.22, 0.70, foamNoise);
+
+    // ----------------------------------------------
+    // WATER COLORS
+    // ----------------------------------------------
+
+    vec3 abyss = vec3(0.002, 0.012, 0.045);
+    vec3 deepBlue = vec3(0.005, 0.045, 0.13);
+    vec3 oceanBlue = vec3(0.008, 0.16, 0.32);
+    vec3 turquoise = vec3(0.015, 0.48, 0.64);
+    vec3 brightCyan = vec3(0.28, 0.88, 1.0);
+
+    float depthColor = exp(-depth * 1.15);
 
     vec3 water = mix(
-        deepOcean,
-        oceanBlue,
-        saturate(lighting + height * 0.4)
+        abyss,
+        deepBlue,
+        sat(diffuse * 0.65 + 0.15)
     );
 
     water = mix(
         water,
-        cyan,
-        fresnel * 0.75
+        oceanBlue,
+        sat(0.25 + fresnel * 0.65 + height * 0.15)
     );
 
-    // Wave crests and foam
-    water += cyan * crest * (0.15 + treble * 0.4);
-    water += lightCyan * foam * (0.15 + volume * 0.6);
+    water += turquoise * crest * 0.28;
 
-    // Specular highlights
+    // Reflections
+    water += brightCyan * fresnel
+             * (0.25 + treble * 0.5);
+
+    // Specular glints
     vec3 halfDir = normalize(lightDir + viewDir);
 
     float specular = pow(
         max(dot(normal, halfDir), 0.0),
-        42.0
+        55.0
     );
 
-    water += vec3(0.35, 0.8, 1.0)
-             * specular
-             * (0.5 + treble + beat * 0.5);
+    water += brightCyan * specular
+             * (0.6 + volume + beat);
 
-    // Depth fog
-    float fog = exp(-depth * 1.5);
-
+    // Foam
     water = mix(
-        vec3(0.008, 0.035, 0.10),
         water,
-        fog
+        vec3(0.55, 0.90, 1.0),
+        foam * (0.35 + volume * 0.45)
     );
 
-    // Audio energy glow
-    water += vec3(0.01, 0.12, 0.24)
-             * volume * (0.3 + fresnel);
+    // Depth atmosphere
+    water = mix(
+        abyss,
+        water,
+        depthColor
+    );
 
-    // Final composition
+    // ----------------------------------------------
+    // LIGHT RAYS
+    // ----------------------------------------------
+
+    float rays = pow(
+        max(dot(normal, lightDir), 0.0),
+        7.0
+    );
+
+    water += turquoise * rays
+             * (0.10 + volume * 0.25);
+
+    // ----------------------------------------------
+    // AUDIO ENERGY
+    // ----------------------------------------------
+
+    water += vec3(0.0, 0.08, 0.18)
+             * bass * (0.25 + crest);
+
+    water += brightCyan * treble * foam * 0.25;
+
+    // ----------------------------------------------
+    // COMPOSITION
+    // ----------------------------------------------
+
     vec3 color = mix(sky, water, oceanMask);
 
-    // Horizon glow
     float horizonGlow = exp(
         -abs(screen.y - horizon) * 38.0
     );
 
-    color += vec3(0.02, 0.18, 0.30)
+    color += vec3(0.025, 0.20, 0.34)
              * horizonGlow
-             * (0.25 + bass + beat);
+             * (0.3 + bass + beat * 0.5);
 
     // Beat flash
-    color += vec3(0.02, 0.12, 0.20)
-             * beat * 0.12 * oceanMask;
+    color += vec3(0.01, 0.10, 0.22)
+             * beat * oceanMask * 0.15;
 
     // Vignette
-    float vignette = 1.0 - 0.35 * dot(
-        screen / vec2(aspect, 1.0),
-        screen / vec2(aspect, 1.0)
+    float vignette = 1.0 - 0.32 * dot(
+        screen,
+        screen
     );
 
     color *= vignette;
 
-    // Contrast and output
+    // Tonemapping
     color = max(color, 0.0);
     color = color / (1.0 + color * 0.35);
 

@@ -1,38 +1,34 @@
-import fullscreen from "./fullscreen.vert?raw";
-import plasma from "./plasma.frag?raw";
-import tunnel from "./tunnel.frag?raw";
-import spiral from "./spiral.frag?raw";
-import galaxy from "./galaxy.frag?raw";
-import dualoscy from "./dualoscy.frag?raw";
-import liquidorb from "./liquidorb.frag?raw";
-import liquidorb2 from "./liquidorb2.frag?raw";
-import livingorb from "./livingorb.frag?raw";
-import livingorb2 from "./livingorb2.frag?raw";
+import fullscreen   from "./fullscreen.vert?raw";
+
+import plasma       from "./plasma.frag?raw";
+import tunnel       from "./tunnel.frag?raw";
+import spiral       from "./spiral.frag?raw";
+import galaxy       from "./galaxy.frag?raw";
+import dualoscy     from "./dualoscy.frag?raw";
+import liquidorb    from "./liquidorb.frag?raw";
+import liquidorb2   from "./liquidorb2.frag?raw";
+import livingorb    from "./livingorb.frag?raw";
+import livingorb2   from "./livingorb2.frag?raw";
 import dualwaveform from "./dualwaveform.frag?raw";
 import digitalocean from "./digitalocean.frag?raw";
 import digitalocean2 from "./digitalocean2.frag?raw";
 
-
-/*const shaders = [
-    plasma,
-    tunnel,
-    spiral,
-    galaxy
-];*/
+const shaders = [
+    { name : "DigitalOcean2",fragment : digitalocean2 },
+    { name : "Spiral",       fragment : spiral       },
+    { name : "Galaxy",       fragment : galaxy       },
+    { name : "Dual Oscy",    fragment : dualoscy     },
+    { name : "Liquid Orb",   fragment : liquidorb    },
+    { name : "Liquid Orb 2", fragment : liquidorb2   },
+    { name : "Living Orb",   fragment : livingorb    },
+    { name : "Living Orb 2", fragment : livingorb2   },
+    { name : "Dual Wave",    fragment : dualwaveform },
+    { name : "DigitalOcean", fragment : digitalocean },
+    { name : "Plasma",       fragment : plasma       },
+    { name : "Tunnel",       fragment : tunnel       },
+];
 
 export default {
-//    shaders,
     fullscreen,
-    plasma,
-    tunnel,
-    spiral,
-    galaxy,
-    dualoscy,
-    liquidorb,
-    liquidorb2,
-    livingorb,
-    livingorb2,
-    dualwaveform,
-    digitalocean,
-    digitalocean2
+    shaders
 };

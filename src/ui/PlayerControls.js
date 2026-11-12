@@ -1,112 +1,112 @@
+import shaders from "../shaders";
+
 export default class PlayerControls {
 
-    // Reproductor de audio
-    #audio;
+    //--------------------------------------------------------------------------
+    // REFERENCIAS PRINCIPALES
+    //--------------------------------------------------------------------------
 
-    // Cola de reproducción
-    #queue;
+    // Reproductor principal.
+    #player;
 
-    // Preferencias a los ajustes
+    // Configuración persistente.
     #settings;
 
-    // Botones
+    // Visualizador de shaders.
+    #renderer;
+
+
+    //--------------------------------------------------------------------------
+    // BOTONES DE REPRODUCCIÓN
+    //--------------------------------------------------------------------------
+
     #btnPlay;
-
     #btnStop;
-
     #btnPrev;
-
     #btnNext;
+    #btnFolder;
 
-    #btnFolder
 
-    // Controles de progreso
+    //--------------------------------------------------------------------------
+    // CONTROLES DE PROGRESO
+    //--------------------------------------------------------------------------
+
     #progressBar;
-
     #volumeBar;
-
     #currentTime;
-
     #totalTime;
 
-    
+
+    //--------------------------------------------------------------------------
+    // CONTROLES DE SHADERS
+    //--------------------------------------------------------------------------
+
+    #btnShaderPrev;
+    #btnShaderNext;
+    #shaderSelect;
+
 
     /**
      * Constructor.
      *
-     * @param {AudioAnalyzer} audio
-     * @param {PlaybackQueue} queue
-     * @param {Settings} settings
+     * @param {Player} player
+     * @param {PlayerSettings} settings
+     * @param {Visualizer} renderer
      */
-    constructor(audio, queue, settings) {
+    constructor(player, settings, renderer) {
 
-        this.#queue = queue;
-        this.#audio = audio;
+        this.#player = player;
         this.#settings = settings;
+        this.#renderer = renderer;
+
         this.#cacheDom();
-
         this.#registerEvents();
-
+        this.#populateShaders();
         this.#update();
     }
 
 
     /**
-     * Obtiene las referencias a los elementos HTML.
+     * Obtiene todas las referencias del DOM.
      */
     #cacheDom() {
+
         this.#btnPlay = document.getElementById("btn-play");
         this.#btnStop = document.getElementById("btn-stop");
         this.#btnPrev = document.getElementById("btn-prev");
         this.#btnNext = document.getElementById("btn-next");
+        this.#btnFolder = document.getElementById("btn-select-folder");
+
         this.#progressBar = document.getElementById("progress-bar");
         this.#volumeBar = document.getElementById("volume-bar");
         this.#currentTime = document.getElementById("current-time");
         this.#totalTime = document.getElementById("total-time");
-        this.#btnFolder = document.getElementById("btn-select-folder");        
 
+        this.#btnShaderPrev = document.getElementById("btn-shader-prev");
+        this.#btnShaderNext = document.getElementById("btn-shader-next");
+        this.#shaderSelect = document.getElementById("shader-select");
     }
 
 
     /**
-     * Registra todos los eventos de los controles.
+     * Registra todos los eventos de la interfaz.
      */
     #registerEvents() {
 
-        this.#btnPlay.addEventListener(
-            "click",
-            () => this.#onPlayPause()
-        );
+        this.#btnPlay.addEventListener("click", () => this.#onPlayPause());
+        this.#btnStop.addEventListener("click", () => this.#onStop());
 
-        this.#btnStop.addEventListener(
-            "click",
-            () => this.#onStop()
-        );
+        this.#btnPrev.addEventListener("click", () => this.#onPrevious());
+        this.#btnNext.addEventListener("click", () => this.#onNext());
 
-        this.#btnPrev.addEventListener(
-            "click",
-            () => this.#onPrevious()
-        );
+        this.#progressBar.addEventListener("input", () => this.#onSeek());
+        this.#volumeBar.addEventListener("input", () => this.#onVolume());
 
-        this.#btnNext.addEventListener(
-            "click",
-            () => this.#onNext()
-        );
+        this.#btnFolder.addEventListener("click", async () => this.#settings.selectFolder());
 
-        this.#progressBar.addEventListener(
-            "input",
-            () => this.#onSeek()
-        );
-
-        this.#volumeBar.addEventListener(
-            "input",
-            () => this.#onVolume()
-        );
-
-        this.#btnFolder.addEventListener(
-            "click",
-            async () => this.#settings.selectFolder());
-
+        this.#btnShaderPrev.addEventListener("click", () => this.#onPreviousShader());
+        this.#btnShaderNext.addEventListener("click", () => this.#onNextShader());
+        this.#shaderSelect.addEventListener("change", () => this.#onShaderChanged());
     }
 
 
@@ -114,13 +114,14 @@ export default class PlayerControls {
      * Alterna entre Play y Pause.
      */
     async #onPlayPause() {
-        await this.#audio.resume();
-        if (this.#audio.isPlaying) {
-            this.#audio.pause();
+
+        if (this.#player.paused) {
+            await this.#player.play();
         }
         else {
-            this.#audio.play();
+            this.#player.pause();
         }
+
         this.#updatePlayButton();
     }
 
@@ -129,27 +130,28 @@ export default class PlayerControls {
      * Detiene la reproducción.
      */
     #onStop() {
-        this.#audio.stop();
+
+        this.#player.stop();
+
         this.#progressBar.value = 0;
+
         this.#updatePlayButton();
     }
 
 
     /**
-     * Canción anterior.
+     * Reproduce la canción anterior.
      */
     async #onPrevious() {
-        const track = this.#queue.previous();
-        await this.#loadTrack(track);
+        await this.#player.previous();
     }
 
 
     /**
-     * Canción siguiente.
+     * Reproduce la siguiente canción.
      */
     async #onNext() {
-        const track = this.#queue.next();
-        await this.#loadTrack(track);
+        await this.#player.next();
     }
 
 
@@ -158,7 +160,7 @@ export default class PlayerControls {
      */
     #onSeek() {
 
-        const duration = this.#audio.duration;
+        const duration = this.#player.duration;
 
         if (duration <= 0) {
             return;
@@ -166,38 +168,18 @@ export default class PlayerControls {
 
         const position = duration * (this.#progressBar.value / 100);
 
-        this.#audio.seek(position);
+        this.#player.seek(position);
     }
 
 
     /**
-     * Cambia el volumen.
+     * Modifica el volumen.
      */
     #onVolume() {
-        this.#audio.volumeLevel = this.#volumeBar.value / 100;
-    }
 
-
-    /**
-     * Carga una canción de la cola.
-     *
-     * @param {Object|null} track
-     */
-    async #loadTrack(track) {
-
-        if (!track) {
-            return;
-        }
-
-        await this.#audio.load(
-            track.path
+        this.#player.setVolume(
+            this.#volumeBar.value / 100
         );
-
-        await this.#audio.resume();
-
-        await this.#audio.play();
-
-        this.#updatePlayButton();
     }
 
 
@@ -205,18 +187,27 @@ export default class PlayerControls {
      * Actualiza el icono Play/Pause.
      */
     #updatePlayButton() {
+
         const icon = this.#btnPlay.querySelector(".icon-play");
-        icon.textContent = this.#audio.isPlaying ? "⏸" : "▶";
+
+        icon.textContent =
+            this.#player.paused
+                ? "▶"
+                : "⏸";
     }
 
 
     /**
-     * Actualiza el estado visual
-     * de los botones Previous y Next.
+     * Actualiza el estado de los botones
+     * anterior y siguiente.
      */
     #updateNavigationButtons() {
-        this.#btnPrev.disabled = !this.#queue.hasPrevious?.();
-        this.#btnNext.disabled = !this.#queue.hasNext?.();
+
+        this.#btnPrev.disabled =
+            !this.#player.queue.hasPrevious();
+
+        this.#btnNext.disabled =
+            !this.#player.queue.hasNext();
     }
 
 
@@ -227,40 +218,119 @@ export default class PlayerControls {
      * @returns {String}
      */
     #formatTime(seconds) {
+
         if (Number.isNaN(seconds)) {
             return "00:00";
         }
 
         const minutes = Math.floor(seconds / 60);
-
         const secs = Math.floor(seconds % 60);
-        // Devuelve minutos y segundos con dos dígitos, separados por dos puntos.
-        return (String(minutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0"));
+
+        return (
+            String(minutes).padStart(2, "0") +
+            ":" +
+            String(secs).padStart(2, "0")
+        );
     }
 
 
     /**
-     * Actualiza la interfaz.
-     *
-     * Se ejecuta una vez por frame.
+     * Actualiza continuamente la interfaz.
      */
     #update() {
-        const current = this.#audio.currentTime;
-        const duration = this.#audio.duration;
+
+        const current = this.#player.currentTime;
+        const duration = this.#player.duration;
 
         if (duration > 0) {
-
-            this.#progressBar.value = (current / duration) * 100;
+            this.#progressBar.value =
+                (current / duration) * 100;
         }
 
-        this.#currentTime.textContent = this.#formatTime(current);
+        this.#currentTime.textContent =
+            this.#formatTime(current);
 
-        this.#totalTime.textContent = this.#formatTime(duration);
+        this.#totalTime.textContent =
+            this.#formatTime(duration);
 
         this.#updatePlayButton();
-
         this.#updateNavigationButtons();
 
-        requestAnimationFrame(() => this.#update());
+        requestAnimationFrame(
+            () => this.#update()
+        );
+    }
+
+
+    /**
+     * Rellena el selector con todos los shaders.
+     */
+    #populateShaders() {
+
+        this.#shaderSelect.innerHTML = "";
+
+        shaders.shaders.forEach((shader, index) => {
+
+            const option = document.createElement("option");
+
+            option.value = index;
+            option.textContent = shader.name;
+
+            this.#shaderSelect.appendChild(option);
+        });
+
+        this.#shaderSelect.value =
+            this.#renderer.shaderIndex;
+    }
+
+
+    /**
+     * Aplica el shader seleccionado en el selector.
+     */
+    #onShaderChanged() {
+
+        const index = parseInt(
+            this.#shaderSelect.value
+        );
+
+        this.#renderer.setShader(index);
+
+        this.#settings.shaderIndex = index;
+
+        this.#settings.save();
+    }
+
+
+    /**
+     * Selecciona el siguiente shader.
+     */
+    #onNextShader() {
+
+        this.#renderer.nextShader();
+
+        this.#shaderSelect.value =
+            this.#renderer.shaderIndex;
+
+        this.#settings.shaderIndex =
+            this.#renderer.shaderIndex;
+
+        this.#settings.save();
+    }
+
+
+    /**
+     * Selecciona el shader anterior.
+     */
+    #onPreviousShader() {
+
+        this.#renderer.previousShader();
+
+        this.#shaderSelect.value =
+            this.#renderer.shaderIndex;
+
+        this.#settings.shaderIndex =
+            this.#renderer.shaderIndex;
+
+        this.#settings.save();
     }
 }

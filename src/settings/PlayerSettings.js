@@ -16,10 +16,10 @@ export default class PlayerSettings {
         shuffle: false,
         // Modo repetición.
         repeat: false,
-        // Shader seleccionado.
-        visualizer: "galaxy",
         // Fecha del último escaneo de la biblioteca.
-        lastLibraryScan: null
+        lastLibraryScan: null,
+        // Visualizacion seleccionada
+        shaderIndex:0
     };
 
 
@@ -32,8 +32,8 @@ export default class PlayerSettings {
      */
     constructor() {
         this.#settings = structuredClone(
-                PlayerSettings.DEFAULT_SETTINGS
-            );
+            PlayerSettings.DEFAULT_SETTINGS
+        );
     }
 
     async selectFolder() {
@@ -169,12 +169,14 @@ export default class PlayerSettings {
     /**
      * Shader seleccionado actualmente.
      */
-    get visualizer() {
-        return this.#settings.visualizer;
+    get shaderIndex() {
+        return this.#settings.shaderIndex;
     }
 
-    set visualizer(value) {
-        this.#settings.visualizer = value;
+    set shaderIndex(value) {
+        this.#settings.shaderIndex = value;
         this.save();
     }
+
+    
 }

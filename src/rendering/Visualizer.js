@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import shaders from "../shaders";
 
 export default class Visualizer {
 
@@ -35,8 +36,11 @@ export default class Visualizer {
     // Contador de frames
     #frame = 0;
 
+    // Shader actual
+    #shaderIndex = 0;
 
-    constructor(audio, fragmentShader, vertexShader) {
+
+    constructor(audio) {
 
         this.#audio = audio;
 
@@ -46,10 +50,7 @@ export default class Visualizer {
 
         this.#createUniforms();
 
-        this.#createMaterial(
-            fragmentShader,
-            vertexShader
-        );
+        this.#createMaterial();
 
         this.#registerEvents();
     }
@@ -60,13 +61,20 @@ export default class Visualizer {
      */
     #createScene() {
 
-        this.#scene =
-            new THREE.Scene();
+        this.#scene = new THREE.Scene();
 
-        this.#camera =
-            new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.#camera = new THREE.OrthographicCamera(
+            -1,
+            1,
+            1,
+            -1,
+            0,
+            1
+        );
 
-        this.#renderer = new THREE.WebGLRenderer({ antialias: true});
+        this.#renderer = new THREE.WebGLRenderer({
+            antialias : true
+        });
 
         this.#renderer.setSize(
             window.innerWidth,
@@ -84,27 +92,23 @@ export default class Visualizer {
      */
     #createTextures() {
 
-        this.#waveformTexture =
-            new THREE.DataTexture(
-                new Uint8Array(1024),
-                1024,
-                1,
-                THREE.RedFormat
-            );
+        this.#waveformTexture = new THREE.DataTexture(
+            new Uint8Array(1024),
+            1024,
+            1,
+            THREE.RedFormat
+        );
 
-        this.#waveformTexture.needsUpdate =
-            true;
+        this.#waveformTexture.needsUpdate = true;
 
-        this.#fftTexture =
-            new THREE.DataTexture(
-                new Uint8Array(1024),
-                1024,
-                1,
-                THREE.RedFormat
-            );
+        this.#fftTexture = new THREE.DataTexture(
+            new Uint8Array(1024),
+            1024,
+            1,
+            THREE.RedFormat
+        );
 
-        this.#fftTexture.needsUpdate =
-            true;
+        this.#fftTexture.needsUpdate = true;
     }
 
 
@@ -115,50 +119,47 @@ export default class Visualizer {
 
         this.#uniforms = {
 
-            uTime: {
-                value: 0
+            uTime : {
+                value : 0
             },
 
-            uFrame: {
-                value: 0
+            uFrame : {
+                value : 0
             },
 
-            uBass: {
-                value: 0
+            uBass : {
+                value : 0
             },
 
-            uMid: {
-                value: 0
+            uMid : {
+                value : 0
             },
 
-            uTreble: {
-                value: 0
+            uTreble : {
+                value : 0
             },
 
-            uVolume: {
-                value: 0
+            uVolume : {
+                value : 0
             },
 
-            uBeat: {
-                value: 0
+            uBeat : {
+                value : 0
             },
 
-            uWaveform: {
-                value:
-                    this.#waveformTexture
+            uWaveform : {
+                value : this.#waveformTexture
             },
 
-            uSpectrum: {
-                value:
-                    this.#fftTexture
+            uSpectrum : {
+                value : this.#fftTexture
             },
 
-            uResolution: {
-                value:
-                    new THREE.Vector2(
-                        window.innerWidth,
-                        window.innerHeight
-                    )
+            uResolution : {
+                value : new THREE.Vector2(
+                    window.innerWidth,
+                    window.innerHeight
+                )
             }
         };
     }
@@ -167,33 +168,28 @@ export default class Visualizer {
     /**
      * Crea material y quad.
      */
-    #createMaterial(
-        fragmentShader,
-        vertexShader
-    ) {
+    #createMaterial() {
 
-        this.#geometry =
-            new THREE.PlaneGeometry(
-                2,
-                2
-            );
+        this.#geometry = new THREE.PlaneGeometry(
+            2,
+            2
+        );
 
-        this.#material =
-            new THREE.ShaderMaterial({
+        this.#material = new THREE.ShaderMaterial({
 
-                uniforms:
-                    this.#uniforms,
+            uniforms : this.#uniforms,
 
-                vertexShader,
+            vertexShader :
+                shaders.fullscreen,
 
-                fragmentShader
-            });
+            fragmentShader :
+                shaders.shaders[this.#shaderIndex].fragment
+        });
 
-        this.#mesh =
-            new THREE.Mesh(
-                this.#geometry,
-                this.#material
-            );
+        this.#mesh = new THREE.Mesh(
+            this.#geometry,
+            this.#material
+        );
 
         this.#scene.add(
             this.#mesh
@@ -248,7 +244,6 @@ export default class Visualizer {
 
         this.#audio.update();
 
-        // Waveform completa
         this.#waveformTexture.image.data.set(
             this.#audio.waveform.subarray(
                 0,
@@ -256,10 +251,8 @@ export default class Visualizer {
             )
         );
 
-        this.#waveformTexture.needsUpdate =
-            true;
+        this.#waveformTexture.needsUpdate = true;
 
-        // FFT completa
         this.#fftTexture.image.data.set(
             this.#audio.spectrum.subarray(
                 0,
@@ -267,8 +260,7 @@ export default class Visualizer {
             )
         );
 
-        this.#fftTexture.needsUpdate =
-            true;
+        this.#fftTexture.needsUpdate = true;
 
         this.#uniforms.uTime.value =
             time * 0.001;
@@ -303,13 +295,74 @@ export default class Visualizer {
 
 
     /**
-     * Cambia el fragment shader.
+     * Cambia el shader por índice.
      */
-    setShader(fragmentShader) {
+    setShader(index = 0) {
 
-        this.#material.fragmentShader =            fragmentShader;
+        if (
+            index < 0 ||
+            index >= shaders.shaders.length
+        ) {
+            return;
+        }
 
-        this.#material.needsUpdate =            true;
+        this.#shaderIndex = index;
+
+        this.#material.fragmentShader =
+            shaders.shaders[index].fragment;
+
+        this.#material.needsUpdate = true;
+
+        console.log(
+            "Shader:",
+            shaders.shaders[index].name
+        );
+    }
+
+
+    /**
+     * Cambia al siguiente shader.
+     */
+    nextShader() {
+
+        let index = this.#shaderIndex + 1;
+
+        if (index >= shaders.shaders.length) {
+            index = 0;
+        }
+
+        this.setShader(index);
+    }
+
+
+    /**
+     * Cambia al shader anterior.
+     */
+    previousShader() {
+
+        let index = this.#shaderIndex - 1;
+
+        if (index < 0) {
+            index = shaders.shaders.length - 1;
+        }
+
+        this.setShader(index);
+    }
+
+
+    /**
+     * Nombre del shader actual.
+     */
+    get shaderName() {
+        return shaders.shaders[this.#shaderIndex].name;
+    }
+
+
+    /**
+     * Índice del shader actual.
+     */
+    get shaderIndex() {
+        return this.#shaderIndex;
     }
 
 

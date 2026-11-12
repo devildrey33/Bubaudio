@@ -1,3 +1,13 @@
+import {
+    readDir,
+    readTextFile,
+    writeTextFile,
+    mkdir,
+    readFile,
+    BaseDirectory
+}
+from "@tauri-apps/plugin-fs";
+
 export default class AudioAnalyzer {
 
     // Rangos de frecuencia utilizados para las bandas
@@ -49,69 +59,108 @@ export default class AudioAnalyzer {
 
     #beat = 0;
 
+    #blobUrl = null;
 
     /**
      * Constructor.
      * @param {Number} fftSize
      */
     constructor(fftSize = 2048) {
+
         this.#fftSize = fftSize;
+
+        this.#audioContext = new AudioContext();
+
+        this.#audioElement = new Audio();
+
+        this.#source = this.#audioContext.createMediaElementSource(this.#audioElement);
+
+        this.#analyser = this.#audioContext.createAnalyser();
+        this.#analyser.fftSize = this.#fftSize;
+
+        this.#source.connect(this.#analyser);
+        this.#analyser.connect(this.#audioContext.destination);
+
+        this.#fftData = new Uint8Array(fftSize / 2);
+        this.#timeData = new Uint8Array(fftSize / 2);
     }
 
 
     /**
-     * Carga un archivo de audio o una URL.
-     * @param {File|String} file
+     * Carga un archivo de audio.
+     *
+     * Se lee mediante Tauri y se convierte a Blob para
+     * evitar las restricciones del WebView con rutas
+     * locales y recursos UNC.
+     *
+     * @param {String} path
      */
-    async load(file) {
+    async load(path) {
 
-        if (this.#audioContext) {
-            await this.destroy();
-        }
+        this.stop();
 
-        this.#audioContext =
-            new AudioContext();
+        // Liberar el Blob anterior para evitar fugas
+        // de memoria cuando cambiamos de canción.
+        if (this.#blobUrl !== null) {
 
-        this.#audioElement =
-            new Audio();
-
-        if (file instanceof File) {
-            this.#audioElement.src =
-                URL.createObjectURL(file);
-        }
-        else {
-            this.#audioElement.src =
-                file;
-        }
-
-        this.#source =
-            this.#audioContext.createMediaElementSource(
-                this.#audioElement
+            URL.revokeObjectURL(
+                this.#blobUrl
             );
 
-        this.#analyser =
-            this.#audioContext.createAnalyser();
+            this.#blobUrl = null;
+        }
 
-        this.#analyser.fftSize =
-            this.#fftSize;
+        // Leer el fichero completo.
+        const data = await readFile(path);
 
-        this.#source.connect(
-            this.#analyser
+        // Intentar deducir el mime type.
+        const extension = path
+            .split(".")
+            .pop()
+            ?.toLowerCase();
+
+        let mimeType = "audio/mpeg";
+
+        switch (extension) {
+
+            case "flac" :
+                mimeType = "audio/flac";
+                break;
+
+            case "ogg" :
+                mimeType = "audio/ogg";
+                break;
+
+            case "opus" :
+                mimeType = "audio/ogg";
+                break;
+
+            case "wav" :
+                mimeType = "audio/wav";
+                break;
+
+            case "m4a" :
+                mimeType = "audio/mp4";
+                break;
+
+            case "aac" :
+                mimeType = "audio/aac";
+                break;
+        }
+
+        // Crear Blob reproducible por HTMLAudioElement.
+        const blob = new Blob(
+            [data],
+            { type : mimeType }
         );
 
-        this.#analyser.connect(
-            this.#audioContext.destination
+        this.#blobUrl = URL.createObjectURL(
+            blob
         );
 
-        this.#fftData =
-            new Uint8Array(
-                this.#analyser.frequencyBinCount
-            );
+        this.#audioElement.src = this.#blobUrl;
 
-        this.#timeData =
-            new Uint8Array(
-                this.#analyser.frequencyBinCount
-            );
+        this.#audioElement.load();
     }
 
 
@@ -135,11 +184,7 @@ export default class AudioAnalyzer {
      * Reanuda el AudioContext.
      */
     async resume() {
-
-        if (
-            this.#audioContext &&
-            this.#audioContext.state === "suspended"
-        ) {
+        if (this.#audioContext && this.#audioContext.state === "suspended") {
             await this.#audioContext.resume();
         }
     }
@@ -155,62 +200,26 @@ export default class AudioAnalyzer {
             return;
         }
 
-        this.#analyser.getByteFrequencyData(
-            this.#fftData
-        );
+        this.#analyser.getByteFrequencyData(this.#fftData);
+        this.#analyser.getByteTimeDomainData(this.#timeData);
 
-        this.#analyser.getByteTimeDomainData(
-            this.#timeData
-        );
+        const bass = this.#averageBand(AudioAnalyzer.BASS_MIN, AudioAnalyzer.BASS_MAX);
 
-        const bass =
-            this.#averageBand(
-                AudioAnalyzer.BASS_MIN,
-                AudioAnalyzer.BASS_MAX
-            );
-
-        const mid =
-            this.#averageBand(
-                AudioAnalyzer.MID_MIN,
-                AudioAnalyzer.MID_MAX
-            );
-
-        const treble =
-            this.#averageBand(
-                AudioAnalyzer.TREBLE_MIN,
-                AudioAnalyzer.TREBLE_MAX
-            );
-
-        const volume =
-            this.#computeVolume();
+        const mid = this.#averageBand(AudioAnalyzer.MID_MIN, AudioAnalyzer.MID_MAX);
+        const treble = this.#averageBand(AudioAnalyzer.TREBLE_MIN, AudioAnalyzer.TREBLE_MAX);
+        const volume = this.#computeVolume();
 
         // Suavizado
-        this.#bass += (
-            bass -
-            this.#bass
-        ) * AudioAnalyzer.SMOOTHING;
+        this.#bass += (bass - this.#bass) * AudioAnalyzer.SMOOTHING;
 
-        this.#mid += (
-            mid -
-            this.#mid
-        ) * AudioAnalyzer.SMOOTHING;
+        this.#mid += (mid - this.#mid) * AudioAnalyzer.SMOOTHING;
 
-        this.#treble += (
-            treble -
-            this.#treble
-        ) * AudioAnalyzer.SMOOTHING;
+        this.#treble += (treble - this.#treble) * AudioAnalyzer.SMOOTHING;
 
-        this.#volume += (
-            volume -
-            this.#volume
-        ) * AudioAnalyzer.SMOOTHING;
+        this.#volume += (volume - this.#volume) * AudioAnalyzer.SMOOTHING;
 
         // Beat detector básico
-        if (
-            bass >
-            this.#bass +
-            AudioAnalyzer.BEAT_THRESHOLD
-        ) {
+        if (bass > this.#bass + AudioAnalyzer.BEAT_THRESHOLD) {
             this.#beat = 1.0;
         }
 
@@ -222,22 +231,12 @@ export default class AudioAnalyzer {
      * Calcula el volumen medio.
      */
     #computeVolume() {
-
         let total = 0;
-
-        for (
-            let i = 0;
-            i < this.#fftData.length;
-            i++
-        ) {
+        for (let i = 0; i < this.#fftData.length; i++) {
             total += this.#fftData[i];
         }
 
-        return (
-            total /
-            this.#fftData.length /
-            255
-        );
+        return (total / this.#fftData.length / 255);
     }
 
 
@@ -245,32 +244,14 @@ export default class AudioAnalyzer {
      * Calcula una banda de frecuencia.
      */
     #averageBand(minFreq, maxFreq) {
-
-        const nyquist =
-            this.#audioContext.sampleRate * 0.5;
-
-        const minIndex =
-            Math.floor(
-                minFreq /
-                nyquist *
-                this.#fftData.length
-            );
-
-        const maxIndex =
-            Math.floor(
-                maxFreq /
-                nyquist *
-                this.#fftData.length
-            );
+        const nyquist = this.#audioContext.sampleRate * 0.5;
+        const minIndex = Math.floor(minFreq / nyquist * this.#fftData.length);
+        const maxIndex = Math.floor(maxFreq / nyquist * this.#fftData.length);
 
         let total = 0;
         let count = 0;
 
-        for (
-            let i = minIndex;
-            i <= maxIndex;
-            i++
-        ) {
+        for (let i = minIndex; i <= maxIndex; i++) {
             total += this.#fftData[i];
             count++;
         }
@@ -280,9 +261,7 @@ export default class AudioAnalyzer {
         }
 
         return (
-            total /
-            count /
-            255
+            total / count / 255
         );
     }
 
@@ -317,8 +296,16 @@ export default class AudioAnalyzer {
 
 
     async destroy() {
-
         this.pause();
+
+        if (this.#blobUrl !== null) {
+
+            URL.revokeObjectURL(
+                this.#blobUrl
+            );
+
+            this.#blobUrl = null;
+        }
 
         if (this.#audioContext) {
             await this.#audioContext.close();
@@ -329,13 +316,11 @@ export default class AudioAnalyzer {
      * Detiene la reproducción.
      */
     stop() {
-
         if (!this.#audioElement) {
             return;
         }
 
         this.#audioElement.pause();
-
         this.#audioElement.currentTime = 0;
     }
 
@@ -344,10 +329,7 @@ export default class AudioAnalyzer {
      * Posición actual en segundos.
      */
     get currentTime() {
-
-        return this.#audioElement
-            ? this.#audioElement.currentTime
-            : 0;
+        return this.#audioElement ? this.#audioElement.currentTime : 0;
     }
 
 
@@ -355,10 +337,7 @@ export default class AudioAnalyzer {
      * Duración total en segundos.
      */
     get duration() {
-
-        return this.#audioElement
-            ? this.#audioElement.duration || 0
-            : 0;
+        return this.#audioElement ? this.#audioElement.duration || 0 : 0;
     }
 
 
@@ -366,7 +345,6 @@ export default class AudioAnalyzer {
      * Volumen actual.
      */
     get volumeLevel() {
-
         return this.#audioElement.volume;
     }
 
@@ -375,15 +353,7 @@ export default class AudioAnalyzer {
      * Modifica el volumen.
      */
     set volumeLevel(value) {
-
-        this.#audioElement.volume =
-            Math.min(
-                1,
-                Math.max(
-                    0,
-                    value
-                )
-            );
+        this.#audioElement.volume = Math.min(1, Math.max(0, value));
     }
 
 
@@ -391,13 +361,10 @@ export default class AudioAnalyzer {
      * Cambia la posición de reproducción.
      */
     seek(seconds) {
-
         if (!this.#audioElement) {
             return;
         }
-
-        this.#audioElement.currentTime =
-            seconds;
+        this.#audioElement.currentTime = seconds;
     }
 
 
@@ -405,10 +372,10 @@ export default class AudioAnalyzer {
      * Estado actual.
      */
     get isPlaying() {
+        return (this.#audioElement && !this.#audioElement.paused);
+    }    
 
-        return (
-            this.#audioElement &&
-            !this.#audioElement.paused
-        );
+    get audioElement() {
+        return this.#audioElement;
     }    
 }
