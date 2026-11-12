@@ -8,15 +8,7 @@
  * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/
  */
-import {
-    readDir,
-    readTextFile,
-    writeTextFile,
-    mkdir,
-    readFile,
-    BaseDirectory
-}
-from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
 
 export default class AudioAnalyzer {
 

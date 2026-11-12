@@ -14,7 +14,9 @@ import PlaybackQueue from "./PlaybackQueue.js";
 
 export default class Player extends EventTarget {
 
-    #audioAnalyzer
+    #audioAnalyzer;
+
+    #panelQueue;
 
     constructor(audioAnalyzer) {
 

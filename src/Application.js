@@ -4,6 +4,7 @@ import AudioAnalyzer   from "./audio/AudioAnalyzer.js";
 import Visualizer      from "./rendering/Visualizer.js";
 
 import PlayerControls  from "./ui/PlayerControls.js";
+import QueuePanel      from "./ui/QueuePanel.js";
 
 import PlayerSettings  from "./settings/PlayerSettings.js";
 
@@ -15,14 +16,15 @@ import Player          from "./playlist/Player.js";
 export default class Application {
 
     constructor() {
-        this.settings  = null;
-        this.library   = null;
+        this.settings       = null;
+        this.library        = null;
 
-        this.audio     = null;
-        this.player    = null;
-
-        this.controls  = null;
-        this.renderer  = null;
+        this.audio          = null;
+        this.player         = null;
+        this.panelQueue     = null;
+        this.panelLibrary   = null;
+        this.panelControls  = null;
+        this.renderer       = null;
     }
 
 
@@ -75,7 +77,7 @@ export default class Application {
 
         this.audio = new AudioAnalyzer();
 
-        this.player = new Player(this.audio);
+        this.player = new Player(this.audio, this.panelQueue);
 
         this.renderer = new Visualizer(this.audio);
         this.renderer.setShader(this.settings.shaderIndex);
@@ -85,12 +87,14 @@ export default class Application {
         // UI
         //======================================================================
 
-        this.controls = new PlayerControls(
+        this.panelControls = new PlayerControls(
             this.player,
 //            this.player.queue,
             this.settings,
             this.renderer
         );
+
+        this.panelQueue = new QueuePanel();
 
 
         //======================================================================
@@ -98,6 +102,14 @@ export default class Application {
         //======================================================================
 
         this.#setupDebugEvents();
+
+        this.player.addEventListener("trackchanged", (event) => {
+
+            this.panelQueue.setCurrentTrack(
+                event.detail.item.queueId
+            );
+
+        });        
 
         console.log("Application inicializada");
     }

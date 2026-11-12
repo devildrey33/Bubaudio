@@ -1,4 +1,12 @@
+// GALAXIA AUDIOREACTIVA — THREE.ShaderMaterial / GLSL ES 1.00
+// Requiere un vertex shader que exponga: varying vec2 vUv;
+// Todas las señales de audio se esperan normalizadas a [0, 1].
+// uSpectrum y uWaveform usan el canal R y datos horizontales.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 
 varying vec2 vUv;
 
@@ -12,141 +20,181 @@ uniform float uBeat;
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
-// ---------- Utilidades ----------
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
+
+float sat(float x) {
+    return clamp(x, 0.0, 1.0);
 }
 
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
-               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
 }
 
-float fbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
-    for (int i = 0; i < 5; i++) {
-        v += a * noise(p);
-        p *= 2.0;
-        a *= 0.5;
-    }
-    return v;
+vec2 hash22(vec2 p) {
+    float n = sin(dot(p, vec2(41.17, 289.31))) * 43758.5453;
+    return fract(vec2(n, n * 1.731 + 17.17));
 }
 
-// Paleta cromática dinámica
-vec3 palette(float t) {
-    vec3 a = vec3(0.5);
-    vec3 b = vec3(0.5);
-    vec3 c = vec3(1.0);
-    vec3 d = vec3(0.0, 0.33, 0.67);
-    return a + b * cos(6.28318 * (c * t + d));
+mat2 rotate2D(float a) {
+    float s = sin(a);
+    float c = cos(a);
+    return mat2(c, s, -s, c);
+}
+
+float spectrum(float x) {
+    x = clamp(x, 0.0, 1.0);
+    return sat(texture2D(uSpectrum, vec2(0.008 + 0.984 * x, 0.5)).r);
+}
+
+float waveform(float x) {
+    return texture2D(uWaveform, vec2(clamp(x, 0.002, 0.998), 0.5)).r * 2.0 - 1.0;
+}
+
+vec3 starPalette(float x) {
+    return 0.5 + 0.5 * cos(TAU * (x + vec3(0.00, 0.18, 0.38)));
+}
+
+// Campo de estrellas estable en coordenadas de pantalla.
+vec3 starField(vec2 p, float scale, float brightness, float seed) {
+    vec2 cell = floor(p * scale);
+    vec2 local = fract(p * scale) - 0.5;
+    vec2 rnd = hash22(cell + seed);
+    vec2 position = (rnd - 0.5) * 0.78;
+    float distanceToStar = length(local - position);
+    float size = mix(0.015, 0.12, pow(rnd.x, 7.0));
+    float star = exp(-distanceToStar * distanceToStar / max(size * size, 0.0001));
+    float twinkle = 0.68 + 0.32 * sin(uTime * (1.5 + rnd.y * 4.0) + rnd.x * 40.0);
+    float energy = spectrum(rnd.y);
+    vec3 color = starPalette(rnd.x * 0.5 + rnd.y * 0.2);
+    return color * star * brightness * twinkle * (0.35 + 1.3 * energy);
+}
+
+// SDF aproximada de una espiral logaritmica. Devuelve una linea luminosa.
+float spiralArm(vec2 p, float arm, float turns, float width) {
+    float r = max(length(p), 0.0001);
+    float a = atan(p.y, p.x);
+    float logarithmic = a - turns * log(r + 0.12) - arm * TAU;
+    float wrapped = abs(fract(logarithmic / TAU + 0.5) - 0.5) * TAU;
+    return exp(-wrapped * wrapped / max(width * width, 0.00001));
 }
 
 void main() {
-    // Coordenadas centradas y corregidas por aspect ratio
-    vec2 uv = vUv;
-    vec2 p = (uv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-    
-    float dist = length(p);
+    float bass = sat(uBass);
+    float mid = sat(uMid);
+    float treble = sat(uTreble);
+    float volume = sat(uVolume);
+    float beat = sat(uBeat);
+    float t = mod(uTime, 600.0);
+
+    vec2 resolution = max(uResolution, vec2(1.0));
+    vec2 uv = vUv * 2.0 - 1.0;
+    vec2 p = uv * vec2(resolution.x / resolution.y, 1.0);
+    float radius = length(p);
     float angle = atan(p.y, p.x);
 
-    // ---------- Datos de audio ----------
-    // Muestreo del espectro (0..1 a lo largo del eje X)
-    float specLow  = texture2D(uSpectrum, vec2(0.05, 0.5)).r;
-    float specMid  = texture2D(uSpectrum, vec2(0.30, 0.5)).r;
-    float specHigh = texture2D(uSpectrum, vec2(0.70, 0.5)).r;
+    // La galaxia rota y respira con graves y golpes.
+    float spin = t * (0.055 + 0.075 * bass + 0.025 * beat);
+    vec2 galaxy = rotate2D(-spin) * p;
+    float galaxyRadius = length(galaxy);
 
-    // Muestreo de la waveform según el ángulo para envolvente circular
-    float wSample = texture2D(uWaveform, vec2(fract(angle / 6.28318 + 0.5), 0.5)).r;
+    // Campo profundo con tres escalas de estrellas.
+    vec3 color = vec3(0.002, 0.003, 0.012);
+    color += starField(rotate2D(0.05) * p, 19.0, 0.18, 1.0);
+    color += starField(rotate2D(-0.12) * p, 38.0, 0.13, 7.0);
+    color += starField(rotate2D(0.27) * p, 74.0, 0.085, 19.0);
 
-    // Amplitudes normalizadas
-    float bass   = uBass;
-    float mid    = uMid;
-    float treble = uTreble;
-    float vol    = uVolume;
+    // Disco tenue: polvo azul, magenta y turquesa alrededor del centro.
+    float disk = exp(-galaxyRadius * 1.35);
+    float diskThickness = exp(-abs(galaxy.y) * (3.2 + 2.0 * treble));
+    vec3 diskColor = mix(vec3(0.025, 0.08, 0.24),
+                          vec3(0.26, 0.035, 0.28),
+                          smoothstep(0.08, 0.85, galaxyRadius));
+    color += diskColor * disk * diskThickness * (0.16 + 0.25 * volume);
 
-    // Beat con decay para pulsos vivos
-    float beatPulse = uBeat * uBeat;
-
-    // ---------- Fondo: nebulosa fluida ----------
-    vec2 q = p * (1.5 + bass * 2.0);
-    q += vec2(uTime * 0.15, -uTime * 0.1);
-    float n = fbm(q + fbm(q * 0.8 + uTime * 0.2));
-    
-    vec3 col = palette(n * 0.5 + uTime * 0.05 + treble * 0.3);
-    col *= 0.25 + 0.5 * n;
-    col += vec3(0.05, 0.02, 0.15) * (1.0 - dist);
-
-    // ---------- Anillo reactivo al bajo ----------
-    float ringRadius = 0.35 + bass * 0.15 + beatPulse * 0.05;
-    float ringWidth  = 0.03 + mid * 0.02;
-    // Distorsión angular con waveform
-    float warpedDist = dist + (wSample - 0.5) * 0.08 * (0.3 + mid);
-    float ring = smoothstep(ringWidth, 0.0, abs(warpedDist - ringRadius));
-    col += palette(0.15 + uTime * 0.1) * ring * (1.0 + beatPulse * 2.0);
-
-    // ---------- Rayos radiales reactivos al medio ----------
-    float rays = pow(abs(sin(angle * 12.0 + uTime * 1.5)), 8.0);
-    rays *= smoothstep(ringRadius + 0.2, ringRadius, dist);
-    rays *= mid * 2.0 + beatPulse;
-    col += palette(0.5 + uTime * 0.05) * rays * 0.6;
-
-    // ---------- Espectro circular alrededor del anillo ----------
-    // Cada ángulo lee una frecuencia distinta
-    float freqIndex = fract(angle / 6.28318 + 0.5);
-    float specValue = texture2D(uSpectrum, vec2(freqIndex * 0.9 + 0.05, 0.5)).r;
-    
-    float barRadius = ringRadius + 0.05 + specValue * 0.35;
-    float bar = smoothstep(0.008, 0.0, abs(dist - barRadius));
-    // Solo dibuja barras desde el anillo hacia afuera
-    bar *= step(ringRadius + 0.03, dist);
-    col += palette(freqIndex + uTime * 0.1) * bar * (1.5 + treble);
-
-    // Líneas internas del espectro (más tenues)
-    for (int i = 1; i < 6; i++) {
-        float fi = float(i) / 6.0;
-        float r = ringRadius + 0.05 + specValue * 0.35 * fi;
-        float l = smoothstep(0.003, 0.0, abs(dist - r));
-        l *= step(ringRadius + 0.03, dist);
-        col += palette(freqIndex + fi + uTime * 0.1) * l * 0.4;
+    // Tres brazos que se ensanchan y brillan en función del espectro.
+    float arms = 0.0;
+    float armDust = 0.0;
+    for (int i = 0; i < 3; i++) {
+        float armIndex = float(i);
+        float armPhase = armIndex / 3.0 + 0.02 * waveform(0.25 + armIndex * 0.22);
+        float width = 0.105 + 0.035 * mid + 0.018 * sin(t + armIndex);
+        float arm = spiralArm(galaxy * (1.0 + 0.18 * galaxyRadius),
+                              armPhase, 1.20 + 0.12 * bass, width);
+        float localSpectrum = spectrum(fract(galaxyRadius * 0.72 + armPhase));
+        float ridges = 0.55 + 0.45 * sin(galaxyRadius * 38.0 - t * 0.8
+                                         + armIndex * 2.4);
+        arms += arm * (0.25 + 0.8 * localSpectrum) * ridges;
+        armDust += pow(max(arm, 0.0), 2.4) * (0.25 + 0.75 * localSpectrum);
     }
 
-    // ---------- Puntos orbitales con el treble ----------
-    float orbitCount = 60.0;
-    float orbitAngle = angle * orbitCount / 6.28318;
-    float orbitCell = fract(orbitAngle) - 0.5;
-    float orbitRing = ringRadius + 0.6 + sin(uTime * 1.5 + floor(orbitAngle)) * 0.05;
-    float orbitDist = abs(dist - orbitRing);
-    float orbitDot = smoothstep(0.02, 0.0, orbitDist) *
-                     smoothstep(0.35, 0.0, abs(orbitCell)) *
-                     (treble * 3.0 + 0.1);
-    col += vec3(0.8, 0.9, 1.0) * orbitDot;
+    vec3 armColor = mix(vec3(0.025, 0.32, 0.95),
+                        vec3(0.78, 0.06, 0.50),
+                        smoothstep(0.08, 0.78, galaxyRadius));
+    armColor = mix(armColor, vec3(0.15, 0.82, 1.0), treble * 0.36);
+    color += armColor * arms * (0.08 + 0.23 * volume + 0.20 * beat);
+    color += vec3(0.45, 0.06, 0.34) * armDust * 0.10 * mid;
 
-    // ---------- Destello central con el beat ----------
-    float centerFlash = exp(-dist * 6.0) * (beatPulse * 1.5 + vol * 0.5);
-    col += palette(0.3 + uTime * 0.2) * centerFlash;
+    // Nubes granulares de polvo en los brazos.
+    vec2 dustDomain = galaxy * 7.0 + vec2(t * 0.04, -t * 0.025);
+    float dustNoise = 0.0;
+    for (int j = 0; j < 3; j++) {
+        float layer = float(j);
+        vec2 grid = floor(dustDomain * (2.0 + layer));
+        vec2 local = fract(dustDomain * (2.0 + layer)) - 0.5;
+        vec2 point = hash22(grid + layer * 13.0) - 0.5;
+        float grain = exp(-length(local - point) * (12.0 + layer * 10.0));
+        dustNoise += grain * (0.35 / (layer + 1.0));
+    }
+    color += vec3(0.20, 0.06, 0.26) * dustNoise * armDust * (0.15 + 0.55 * mid);
 
-    // ---------- Estela de la waveform como onda horizontal ----------
-    float waveY = texture2D(uWaveform, vec2(uv.x, 0.5)).r - 0.5;
-    float waveLine = smoothstep(0.008, 0.0, abs((uv.y - 0.5) - waveY * 0.25));
-    col += palette(uv.x + uTime * 0.1) * waveLine * (0.6 + mid);
+    // Onda de radio: círculos deformados por muestras de waveform.
+    float radio = 0.0;
+    for (int k = 0; k < 3; k++) {
+        float layer = float(k);
+        float sampleX = 0.5 + 0.5 * sin(angle + layer * 2.1 + t * 0.13);
+        float wave = waveform(sampleX);
+        float ringRadius = 0.22 + layer * 0.25 + wave * (0.025 + 0.055 * volume);
+        float ring = exp(-abs(galaxyRadius - ringRadius) * (42.0 - 12.0 * treble));
+        radio += ring * (0.20 + 0.27 * treble);
+    }
+    color += vec3(0.05, 0.55, 0.95) * radio * (0.20 + volume * 0.80);
 
-    // ---------- Viñeta y viñeta de color ----------
-    float vignette = smoothstep(1.2, 0.3, dist);
-    col *= vignette;
+    // Núcleo: agujero negro estilizado, corona y horizonte brillante.
+    float coreRadius = 0.105 + bass * 0.045 + beat * 0.035;
+    float corona = exp(-galaxyRadius * 11.0) * (0.32 + 0.75 * bass + 0.75 * beat);
+    float horizon = 1.0 - smoothstep(coreRadius * 0.72,
+                                     coreRadius * 1.18, galaxyRadius);
+    float accretion = exp(-abs(galaxyRadius - coreRadius * 1.38) * 34.0);
+    color += vec3(0.72, 0.16, 0.45) * corona;
+    color += vec3(0.30, 0.76, 1.0) * accretion * (0.25 + mid * 0.75);
+    color = mix(color, vec3(0.0002, 0.0003, 0.001), horizon * 0.90);
 
-    // ---------- Bloom / saturación por volumen ----------
-    col = pow(col, vec3(0.9)) * (1.0 + vol * 0.4);
+    // Explosiones puntuales alrededor del núcleo con las frecuencias altas.
+    float sparks = 0.0;
+    for (int s = 0; s < 5; s++) {
+        float id = float(s);
+        float sparkAngle = id * 1.256 + t * (0.12 + id * 0.01);
+        vec2 sparkPosition = vec2(cos(sparkAngle), sin(sparkAngle))
+                            * (0.17 + 0.04 * sin(t + id));
+        float energy = spectrum(0.62 + id * 0.06);
+        sparks += exp(-length(galaxy - sparkPosition) * 95.0) * energy;
+    }
+    color += vec3(0.55, 0.82, 1.0) * sparks * treble * (0.25 + 0.75 * beat);
 
-    // ---------- Grain sutil reactivo ----------
-    float grain = hash(uv * uResolution + uTime) - 0.5;
-    col += grain * 0.03 * (1.0 + treble);
+    // Pulso radial que cruza el disco al llegar un beat.
+    float pulseRadius = mod(t * 0.32, 1.6);
+    float pulse = exp(-abs(galaxyRadius - pulseRadius) * 44.0);
+    color += vec3(0.10, 0.45, 0.90) * pulse * beat * 0.38;
 
-    // ---------- Gamma corrección ----------
-    col = pow(max(col, 0.0), vec3(1.0 / 2.2));
+    // Viñeta y compresión suave para conservar detalle en el núcleo.
+    float vignette = 1.0 - smoothstep(0.42, 1.55, radius);
+    color *= (0.42 + 0.58 * vignette) * (0.62 + 0.72 * volume);
+    color = vec3(1.0) - exp(-color * 1.35);
+    color = pow(max(color, vec3(0.0)), vec3(0.92));
 
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(color, 1.0);
+    #include <colorspace_fragment>
 }
