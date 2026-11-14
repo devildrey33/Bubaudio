@@ -85,16 +85,21 @@ export default class Player extends EventTarget {
      */
     async playCurrent() {
 
+        console.log("currentIndex =", this.queue.currentIndex);
+        console.log("currentItem =", this.queue.currentItem);
+        console.log("currentTrack =", this.queue.currentTrack);
+
         const track = this.queue.currentTrack;
 
         if (!track) {
             return false;
         }
 
+        console.log("LOADING =", track.title);
+        console.log("PATH =", track.path);        
+
         await this.#audioAnalyzer.load(track.path);
-
         await this.#audioAnalyzer.resume();
-
         await this.#audioAnalyzer.play();
 
         this.dispatchEvent(new CustomEvent("trackchanged", {
@@ -317,4 +322,19 @@ export default class Player extends EventTarget {
        return this.#audioAnalyzer.audioElement;
     }
 
+
+    async playQueueItem(queueId) {
+
+        const ok = this.queue.setCurrentQueueId(queueId);
+
+        if (!ok) {
+            return false;
+        }
+        console.log(
+            "currentIndex",
+            this.queue.currentIndex
+        );
+
+        return await this.playCurrent();
+    }
 }

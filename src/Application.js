@@ -1,16 +1,17 @@
 import shaderData from "./shaders";
 
-import AudioAnalyzer   from "./audio/AudioAnalyzer.js";
-import Visualizer      from "./rendering/Visualizer.js";
+import AudioAnalyzer        from "./audio/AudioAnalyzer.js";
+import Visualizer           from "./rendering/Visualizer.js";
 
-import PlayerControls  from "./ui/PlayerControls.js";
-import QueuePanel      from "./ui/QueuePanel.js";
+import PlayerControls       from "./ui/PlayerControls.js";
+import QueuePanel           from "./ui/QueuePanel.js";
+import NowPlayingTooltip    from "./ui/NowPlayingTooltip.js";
 
-import PlayerSettings  from "./settings/PlayerSettings.js";
+import PlayerSettings       from "./settings/PlayerSettings.js";
 
-import LibraryIndexer  from "./libraryindexer/LibraryIndexer.js";
+import LibraryIndexer       from "./libraryindexer/LibraryIndexer.js";
 
-import Player          from "./playlist/Player.js";
+import Player               from "./playlist/Player.js";
 
 
 export default class Application {
@@ -96,6 +97,8 @@ export default class Application {
 
         this.panelQueue = new QueuePanel();
 
+        this.nowPlayingTooltip= new NowPlayingTooltip();
+
 
         //======================================================================
         // Eventos de depuración
@@ -104,6 +107,9 @@ export default class Application {
         this.#setupDebugEvents();
 
         this.player.addEventListener("trackchanged", (event) => {
+            this.nowPlayingTooltip.show(
+                event.detail.track
+            );
 
             this.panelQueue.setCurrentTrack(
                 event.detail.item.queueId
@@ -118,7 +124,6 @@ export default class Application {
     #setupDebugEvents() {
 
         this.player.addEventListener("trackchanged", e => {
-
             console.log(
                 "TRACK:",
                 e.detail.track.artist,

@@ -1,0 +1,65 @@
+#now-playing-tooltip {
+
+    position: fixed;
+
+    right: 20px;
+    bottom: 20px;
+
+    width: 320px;
+
+    padding: 12px;
+
+    background: rgba(20, 20, 20, 0.95);
+
+    border: 1px solid #404040;
+    border-radius: 8px;
+
+    backdrop-filter: blur(10px);
+
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+
+    z-index: 9999;
+
+    pointer-events: none;
+
+    opacity: 0;
+
+    transform: translateY(20px);
+
+    transition:
+        opacity .25s ease,
+        transform .25s ease;
+}
+
+#now-playing-tooltip.visible {
+
+    opacity: 1;
+
+    transform: translateY(0);
+}
+
+#now-playing-title {
+
+    font-size: 15px;
+    font-weight: 600;
+
+    color: white;
+
+    margin-bottom: 4px;
+}
+
+#now-playing-artist {
+
+    font-size: 13px;
+
+    color: #4da3ff;
+
+    margin-bottom: 2px;
+}
+
+#now-playing-album {
+
+    font-size: 12px;
+
+    color: #888;
+}

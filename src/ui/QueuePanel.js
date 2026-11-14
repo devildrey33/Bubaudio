@@ -59,11 +59,13 @@ export default class QueuePanel {
                 </div>
             `;
 
-            element.addEventListener("click", () => {
-
+            // Evento click del item de la lista
+            element.addEventListener("click", async () => {
+                await app.player.playQueueItem(
+                    queueItem.queueId
+                );
                 this.select(queueItem.queueId);
-
-            });
+            });            
 
             this.#container.appendChild(element);
         });
@@ -126,4 +128,5 @@ export default class QueuePanel {
 
         return this.#currentQueueId;
     }
+ 
 }

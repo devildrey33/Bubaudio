@@ -155,8 +155,8 @@ float traceBars(vec3 ro, vec3 rd, out vec3 normal, out vec3 data) {
 }
 
 vec3 barPalette(float frequency, float heightRatio) {
-    // Paleta neón invertida respecto al osciloscopio cálido:
-    // graves ámbar, medios magenta y agudos azul/cian.
+    // Gradiente recuperado: amber -> magenta -> azul electrico.
+    // Mantiene una lectura cromatica clara por bandas de frecuencia.
     vec3 amber = vec3(1.0, 0.16, 0.018);
     vec3 magenta = vec3(0.92, 0.025, 0.42);
     vec3 electricBlue = vec3(0.015, 0.22, 1.0);
@@ -164,9 +164,12 @@ vec3 barPalette(float frequency, float heightRatio) {
     color = mix(color, electricBlue, smoothstep(0.42, 0.78, frequency));
     color = mix(color, vec3(0.02, 0.90, 1.0), smoothstep(0.78, 1.0, frequency));
 
-    // Base oscura para que las caras iluminadas no pierdan saturación.
+    // Emision adicional en las puntas altas para un aspecto mas llamativo.
     float light = smoothstep(0.04, 0.88, heightRatio);
-    return color * (0.16 + 0.84 * light);
+    float neonEdge = smoothstep(0.62, 1.0, heightRatio);
+    color *= 0.15 + 0.85 * light;
+    color += color * neonEdge * (0.16 + 0.18 * sat(uBeat));
+    return color;
 }
 
 vec3 shadeBar(vec3 p, vec3 rd, vec3 normal, vec3 data) {
@@ -198,6 +201,30 @@ vec3 shadeBar(vec3 p, vec3 rd, vec3 normal, vec3 data) {
     topSpark *= smoothstep(0.35, 0.86, sparkPhase);
     color += vec3(1.0, 0.78, 0.28) * topSpark
            * (0.45 + 0.75 * sat(uBeat));
+
+    // Estela procedural: simula acumulacion de movimiento sobre la barra.
+    // Se activa solo con volumen alto, beat y energia espectral elevada.
+    float fastMotion = smoothstep(0.56, 0.82, sat(uVolume))
+                     * (0.28 + 0.72 * sat(uBeat));
+    float energeticBar = smoothstep(0.54, 0.82, data.y);
+    float trailActivation = fastMotion * energeticBar;
+    float normalizedY = sat(p.y / max(data.x, 0.01));
+    float trailPhase = fract(normalizedY * 0.82 - uTime * (0.85 + 0.35 * sat(uBass))
+                             + data.z * 2.0);
+    float trailBand = exp(-abs(trailPhase - 0.32) * 24.0);
+    float trailFade = smoothstep(0.02, 0.20, normalizedY)
+                    * (1.0 - smoothstep(0.78, 1.0, normalizedY));
+    vec3 trailColor = mix(vec3(0.08, 0.78, 1.0),
+                          vec3(1.0, 0.04, 0.62),
+                          smoothstep(0.25, 0.85, data.z));
+    color += trailColor * trailBand * trailFade * trailActivation
+           * (0.16 + 0.48 * sat(uTreble));
+
+    // Halo vertical en la cara superior: da la sensacion de que la barra
+    // deja una imagen residual cuando cambia rapidamente de altura.
+    float verticalGhost = exp(-max(data.x - p.y, 0.0) * 0.34)
+                        * trailActivation * (1.0 - normalizedY);
+    color += trailColor * verticalGhost * 0.075;
     return color;
 }
 
@@ -232,20 +259,27 @@ vec3 shadeFloor(vec3 p) {
 vec3 animatedBackground(vec2 uv, float aspect) {
     vec2 p = uv * vec2(aspect, 1.0);
     float t = mod(uTime, 600.0);
+    // Pulso de graves: mezcla el resumen y los primeros bins del espectro.
+    // Se limita para que el fondo respire sin robar protagonismo a las barras.
+    float lowRhythm = sat(0.68 * smoothSpectrum(0.025) + 0.32 * sat(uBass));
+    float bassBreath = 1.0 + lowRhythm * (0.035 + 0.025 * sat(uBeat));
+    p /= bassBreath;
     float radius = length(p);
 
     vec3 color = mix(vec3(0.002, 0.006, 0.018),
                      vec3(0.012, 0.035, 0.075),
                      1.0 - smoothstep(0.0, 1.25, radius));
+    color += vec3(0.006, 0.025, 0.065) * lowRhythm;
 
     // Nebulosa animada de bajo coste.
-    float cloud = 0.5 + 0.5 * sin(p.x * 3.1 + sin(p.y * 4.7 + t * 0.16)
-                                  + t * 0.11);
+    float cloud = 0.5 + 0.5 * sin(p.x * 3.1 + sin(p.y * 4.7 + t * (0.16 + lowRhythm * 0.04))
+                                  + t * (0.11 + lowRhythm * 0.025));
     cloud *= 0.5 + 0.5 * sin(p.y * 5.3 - t * 0.09 + cloud * 2.2);
-    color += vec3(0.015, 0.07, 0.16) * cloud * (0.3 + 0.7 * sat(uVolume));
+    color += vec3(0.015, 0.07, 0.16) * cloud
+           * (0.3 + 0.7 * sat(uVolume) + 0.24 * lowRhythm);
 
     // Rejilla de perspectiva/holografica en el fondo.
-    vec2 gridUv = p * (7.0 + 3.0 * sat(uMid));
+    vec2 gridUv = p * (7.0 + 3.0 * sat(uMid)) * (1.0 + lowRhythm * 0.025);
     vec2 gridCell = abs(fract(gridUv - 0.5) - 0.5);
     float grid = 1.0 - smoothstep(0.018, 0.065,
                                   min(gridCell.x, gridCell.y));
@@ -253,12 +287,14 @@ vec3 animatedBackground(vec2 uv, float aspect) {
            * (0.18 + 0.34 * sat(uTreble));
 
     // Frentes de onda que se expanden cuando llega un beat.
-    float waveFront = abs(fract(radius * 2.2 - t * 0.12) - 0.5);
-    float rings = exp(-waveFront * 34.0) * (0.10 + 0.55 * sat(uBeat));
+    float waveFront = abs(fract(radius * 2.2 - t * 0.12
+                                - lowRhythm * 0.08) - 0.5);
+    float rings = exp(-waveFront * 34.0)
+                * (0.10 + 0.55 * sat(uBeat) + 0.22 * lowRhythm);
     color += vec3(0.025, 0.24, 0.45) * rings;
 
     float horizonGlow = exp(-abs(p.y + 0.35 * sin(t * 0.13)) * 7.0);
-    color += vec3(0.015, 0.10, 0.16) * horizonGlow * sat(uBass) * 0.45;
+    color += vec3(0.015, 0.10, 0.16) * horizonGlow * lowRhythm * 0.55;
     return color;
 }
 

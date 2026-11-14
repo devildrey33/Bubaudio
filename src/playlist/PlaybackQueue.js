@@ -481,5 +481,38 @@ export default class PlaybackQueue {
     }    
 
 
+
+    /**
+     * Selecciona una canción de la cola mediante su índice.
+     */
+    setCurrentIndex(index) {
+
+        if (index < 0 || index >= this.items.length) {
+            return false;
+        }
+
+        this.currentQueueId = this.items[index].queueId;
+
+        if (this.shuffle) {
+            this.shuffleIndex = this.shuffleOrder.indexOf(
+                this.currentQueueId
+            );
+        }
+
+        return true;
+    }
+
+    setCurrentQueueId(queueId) {
+
+        const index = this.items.findIndex(
+            item => item.queueId === queueId
+        );
+
+        if (index === -1) {
+            return false;
+        }
+
+        return this.setCurrentIndex(index);
+    }
     
 }
