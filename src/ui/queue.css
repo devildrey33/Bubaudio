@@ -246,6 +246,40 @@
     overflow: hidden;
 }
 
+.queue-favorite-toggle {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    flex: 0 0 30px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    color: #9aa8b8;
+    background: transparent;
+    font: inherit;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 120ms ease, background-color 120ms ease;
+}
+
+.queue-favorite-toggle:hover,
+.queue-favorite-toggle:focus-visible,
+.queue-favorite-toggle[aria-pressed="true"] {
+    color: #ffd166;
+}
+
+.queue-favorite-toggle:hover,
+.queue-favorite-toggle:focus-visible {
+    outline: none;
+    background: rgba(255, 209, 102, 0.12);
+}
+
+.queue-favorite-toggle:disabled {
+    cursor: wait;
+}
+
 .queue-title {
     overflow: hidden;
     color: #edf2f8;

@@ -17,12 +17,18 @@ import {
 }
 from "@tauri-apps/plugin-fs";
 
+function normalizeTrackPath(path) {
+    return String(path ?? "")
+        .replace(/[\\/]/g, "\\")
+        .replace(/\\+$/, "")
+        .toLowerCase();
+}
 
 export default class LibraryIndexer extends EventTarget {
 
     // Nombre y versión del índice.
     static LIBRARY_FILE = "library.json";
-    static INDEX_VERSION = 3;
+    static INDEX_VERSION = 4;
 
     // Formatos de audio soportados.
     static SUPPORTED_FORMATS = [
@@ -78,6 +84,12 @@ export default class LibraryIndexer extends EventTarget {
             throw new Error("LibraryIndexer: no hay directorios de música");
         }
 
+        const favoritesByPath = new Map(
+            this.#tracks
+                .filter(track => track.favorite === true)
+                .map(track => [normalizeTrackPath(track.path), true])
+        );
+
         this.clear();
         this.dispatchEvent(new CustomEvent("scanstart", {
             detail: {
@@ -88,6 +100,12 @@ export default class LibraryIndexer extends EventTarget {
         try {
             for (const musicPath of this.#musicPaths) {
                 await this.#scanArtists(musicPath);
+            }
+
+            for (const track of this.#tracks) {
+                track.favorite = favoritesByPath.get(
+                    normalizeTrackPath(track.path)
+                ) ?? false;
             }
 
             await this.save();
@@ -288,6 +306,7 @@ export default class LibraryIndexer extends EventTarget {
             genre   : null,
             // Ruta completa.
             path,
+            favorite: false,
             // Formato detectado.
             format  : extension
         };
@@ -473,6 +492,76 @@ export default class LibraryIndexer extends EventTarget {
     }
 
 
+    isFavorite(trackOrId) {
+        return this.#findTrack(trackOrId)?.favorite === true;
+    }
+
+
+    async setFavorite(trackOrId, favorite) {
+        if (typeof favorite !== "boolean") {
+            throw new TypeError(
+                "LibraryIndexer: el estado favorito debe ser true o false"
+            );
+        }
+
+        const track = this.#findTrack(trackOrId);
+        if (!track) {
+            throw new Error(
+                "LibraryIndexer: no se encontró la canción para actualizar"
+            );
+        }
+
+        const previousFavorite = track.favorite === true;
+        if (previousFavorite === favorite) {
+            return false;
+        }
+
+        track.favorite = favorite;
+        try {
+            await this.save();
+        }
+        catch (error) {
+            track.favorite = previousFavorite;
+            throw error;
+        }
+
+        this.dispatchEvent(new CustomEvent("favoritechange", {
+            detail: {
+                trackId: track.id,
+                favorite,
+                path: track.path
+            }
+        }));
+        return true;
+    }
+
+
+    #findTrack(trackOrId) {
+        const id = typeof trackOrId === "string"
+            ? trackOrId
+            : trackOrId?.id;
+        const track = id
+            ? this.#tracks.find(item => item.id === id)
+            : null;
+
+        if (track) {
+            return track;
+        }
+
+        const path = typeof trackOrId === "string"
+            ? trackOrId
+            : trackOrId?.path;
+        if (!path) {
+            return null;
+        }
+
+        const normalizedPath = normalizeTrackPath(path);
+        return this.#tracks.find(item =>
+            normalizeTrackPath(item.path) === normalizedPath
+        ) ?? null;
+    }
+
+
     /**
      * Carga la biblioteca desde AppData.
      */
@@ -492,10 +581,7 @@ export default class LibraryIndexer extends EventTarget {
                 ? [library.musicPath]
                 : [];
 
-        if (
-            !Number.isInteger(library.version) ||
-            library.version < LibraryIndexer.INDEX_VERSION
-        ) {
+        if (!Number.isInteger(library.version) || library.version < 3) {
             if (this.#musicPaths.length === 0) {
                 throw new Error(
                     "LibraryIndexer: el índice antiguo no contiene directorios de música"
@@ -506,7 +592,18 @@ export default class LibraryIndexer extends EventTarget {
             return library;
         }
 
-        this.#tracks   = library.tracks ?? [];
+        const storedTracks = Array.isArray(library.tracks)
+            ? library.tracks
+            : [];
+        const needsFavoriteMigration =
+            library.version < LibraryIndexer.INDEX_VERSION ||
+            storedTracks.some(track =>
+                typeof track.favorite !== "boolean"
+            );
+        this.#tracks = storedTracks.map(track => ({
+            ...track,
+            favorite: track.favorite === true
+        }));
 
         const artists = library.artists ?? [];
         const albums = library.albums ?? [];
@@ -534,7 +631,8 @@ export default class LibraryIndexer extends EventTarget {
 
         if (
             this.#albums.length !== albums.length ||
-            this.#artists.length !== artists.length
+            this.#artists.length !== artists.length ||
+            needsFavoriteMigration
         ) {
             await this.save();
         }

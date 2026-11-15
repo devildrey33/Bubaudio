@@ -101,6 +101,9 @@ export default class QueuePanel {
             "keydown",
             event => this.#onKeyDown(event)
         );
+        this.#library.addEventListener("favoritechange", () => {
+            this.#refreshFavoriteButtons();
+        });
         this.#container.addEventListener("pointerdown", event => {
             this.#onPointerDown(event);
         });
@@ -427,7 +430,10 @@ export default class QueuePanel {
             subtitle.textContent = queueItem.track.artist ?? "";
 
             main.append(title, subtitle);
-            element.append(queueIndex, main);
+            const favoriteButton = this.#createFavoriteButton(
+                queueItem.track
+            );
+            element.append(queueIndex, main, favoriteButton);
 
             element.addEventListener("click", event => {
                 if (this.#suppressNextClick) {
@@ -447,6 +453,76 @@ export default class QueuePanel {
 
         this.#updateFocusedItem();
         this.#updateSaveButton();
+    }
+
+    #refreshFavoriteButtons() {
+        const itemsById = new Map(
+            this.#queue.orderedItems.map(item => [item.queueId, item])
+        );
+        for (const button of this.#container.querySelectorAll(
+            ".queue-favorite-toggle"
+        )) {
+            const row = button.closest(".queue-item");
+            const item = itemsById.get(row?.dataset.queueId);
+            if (item) {
+                this.#updateFavoriteButton(button, item.track);
+            }
+        }
+    }
+
+    #createFavoriteButton(track) {
+        const button = document.createElement("button");
+        button.className = "queue-favorite-toggle";
+        button.type = "button";
+        this.#updateFavoriteButton(button, track);
+        button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.#toggleFavorite(track, button);
+        });
+        button.addEventListener("dblclick", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        return button;
+    }
+
+    #updateFavoriteButton(button, track) {
+        const favorite = this.#library.isFavorite(track);
+        button.textContent = "★";
+        button.setAttribute("aria-pressed", String(favorite));
+        button.setAttribute(
+            "aria-label",
+            favorite
+                ? `Quitar ${track.title} de favoritos`
+                : `Añadir ${track.title} a favoritos`
+        );
+        button.title = favorite
+            ? "Quitar de favoritos"
+            : "Añadir a favoritos";
+    }
+
+    async #toggleFavorite(track, button) {
+        button.disabled = true;
+        try {
+            await this.#library.setFavorite(
+                track,
+                !this.#library.isFavorite(track)
+            );
+        }
+        catch (error) {
+            console.error(
+                `QueuePanel: no se pudo actualizar el favorito '${track.title}'`,
+                error
+            );
+            window.alert(
+                `No se pudo actualizar el favorito: ${String(error)}`
+            );
+        }
+        finally {
+            button.disabled = false;
+            this.#updateFavoriteButton(button, track);
+        }
     }
 
     #selectQueueItem(queueId, event) {
@@ -503,6 +579,13 @@ export default class QueuePanel {
     }
 
     #onKeyDown(event) {
+        if (
+            event.target instanceof Element &&
+            event.target.closest(".queue-favorite-toggle")
+        ) {
+            return;
+        }
+
         if (event.key === "Delete") {
             if (this.#selectedQueueIds.size > 0) {
                 event.preventDefault();
@@ -658,6 +741,13 @@ export default class QueuePanel {
 
     #onPointerDown(event) {
         if (event.button !== 0 || !event.isPrimary) {
+            return;
+        }
+
+        if (
+            event.target instanceof Element &&
+            event.target.closest(".queue-favorite-toggle")
+        ) {
             return;
         }
 

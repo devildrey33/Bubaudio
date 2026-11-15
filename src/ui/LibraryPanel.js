@@ -11,6 +11,7 @@ export default class LibraryPanel {
     #queuePanel;
     #playlistStore;
     #contextMenu;
+    #directoryTrackIndex = new Map();
 
     constructor(
         library,
@@ -42,12 +43,17 @@ export default class LibraryPanel {
             }
         );
 
+        this.#library.addEventListener("favoritechange", () => {
+            this.#refreshFavoriteDisplays();
+        });
+
         this.render();
     }
 
 
     render() {
 
+        this.#buildDirectoryTrackIndex();
         this.#container.replaceChildren();
         this.#container.appendChild(this.#createPlaylistsNode());
 
@@ -155,6 +161,10 @@ export default class LibraryPanel {
         const artistLabel = document.createElement("summary");
         artistLabel.className = "library-row";
         this.#appendRowContent(artistLabel, "👥", artist.name);
+        this.#appendFavoriteIndicator(
+            artistLabel,
+            this.#library.getArtistTracks(artist.id)
+        );
         artistNode.appendChild(artistLabel);
 
         const albumTree = this.#createAlbumTree(artist);
@@ -234,6 +244,10 @@ export default class LibraryPanel {
         const folderLabel = document.createElement("summary");
         folderLabel.className = "library-row";
         this.#appendRowContent(folderLabel, "📁", directory.name);
+        this.#appendFavoriteIndicator(
+            folderLabel,
+            this.#getDirectoryTracks(directory.path)
+        );
         folderNode.appendChild(folderLabel);
 
         const children = document.createElement("div");
@@ -251,11 +265,7 @@ export default class LibraryPanel {
         albumNode.className = "library-node library-album";
         albumNode.dataset.libraryType = "album";
         albumNode.dataset.libraryId = album.id;
-
-        const albumLabel = document.createElement("summary");
-        albumLabel.className = "library-row";
-        this.#appendRowContent(albumLabel, "💿", album.title);
-        albumNode.appendChild(albumLabel);
+        albumNode.dataset.libraryDirectory = directory?.path ?? album.path;
 
         const tracks = this.#library
             .getAlbumTracks(album.id)
@@ -263,6 +273,15 @@ export default class LibraryPanel {
                 numeric: true,
                 sensitivity: "base"
             }));
+
+        const albumLabel = document.createElement("summary");
+        albumLabel.className = "library-row";
+        this.#appendRowContent(albumLabel, "💿", album.title);
+        this.#appendFavoriteIndicator(
+            albumLabel,
+            this.#getDirectoryTracks(albumNode.dataset.libraryDirectory)
+        );
+        albumNode.appendChild(albumLabel);
 
         const trackList = document.createElement("div");
         trackList.className = "library-children library-tracks";
@@ -273,6 +292,7 @@ export default class LibraryPanel {
             trackRow.dataset.libraryType = "track";
             trackRow.dataset.libraryId = track.id;
             this.#appendRowContent(trackRow, "🎵", track.title);
+            trackRow.appendChild(this.#createFavoriteButton(track));
             trackList.appendChild(trackRow);
         }
 
@@ -295,6 +315,130 @@ export default class LibraryPanel {
         label.textContent = labelText;
 
         row.append(icon, label);
+    }
+
+
+    #createFavoriteButton(track) {
+        const button = document.createElement("button");
+        button.className = "library-favorite-toggle";
+        button.type = "button";
+        button.dataset.libraryId = track.id;
+        this.#updateFavoriteButton(button, track);
+        button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.#toggleFavorite(track, button);
+        });
+        button.addEventListener("dblclick", event => {
+            event.stopPropagation();
+        });
+        return button;
+    }
+
+
+    #updateFavoriteButton(button, track) {
+        const favorite = this.#library.isFavorite(track);
+        button.textContent = "★";
+        button.setAttribute("aria-pressed", String(favorite));
+        button.setAttribute(
+            "aria-label",
+            favorite
+                ? `Quitar ${track.title} de favoritos`
+                : `Añadir ${track.title} a favoritos`
+        );
+        button.title = favorite
+            ? "Quitar de favoritos"
+            : "Añadir a favoritos";
+    }
+
+
+    async #toggleFavorite(track, button) {
+        button.disabled = true;
+        try {
+            await this.#library.setFavorite(
+                track,
+                !this.#library.isFavorite(track)
+            );
+        }
+        catch (error) {
+            console.error(
+                `LibraryPanel: no se pudo actualizar el favorito '${track.title}'`,
+                error
+            );
+            window.alert(
+                `No se pudo actualizar el favorito: ${String(error)}`
+            );
+        }
+        finally {
+            button.disabled = false;
+            this.#updateFavoriteButton(button, track);
+        }
+    }
+
+
+    #appendFavoriteIndicator(row, tracks) {
+        const indicator = document.createElement("span");
+        indicator.className = "library-favorite-indicator";
+        indicator.textContent = "★";
+        indicator.setAttribute("role", "img");
+        indicator.setAttribute("aria-hidden", "false");
+        this.#updateFavoriteIndicator(indicator, tracks);
+        row.appendChild(indicator);
+    }
+
+
+    #updateFavoriteIndicator(indicator, tracks) {
+        const total = tracks.length;
+        const favoriteCount = tracks.filter(track =>
+            this.#library.isFavorite(track)
+        ).length;
+        const ratio = total > 0 ? favoriteCount / total : 0;
+        const opacity = 0.2 + ratio * 0.8;
+        const description =
+            `${favoriteCount} de ${total} canciones favoritas`;
+
+        indicator.style.opacity = String(opacity);
+        indicator.title = description;
+        indicator.setAttribute("aria-label", description);
+    }
+
+
+    #refreshFavoriteDisplays() {
+        for (const button of this.#container.querySelectorAll(
+            ".library-favorite-toggle"
+        )) {
+            const track = this.#findLibraryItem(
+                "track",
+                button.dataset.libraryId
+            );
+            if (track) {
+                this.#updateFavoriteButton(button, track);
+            }
+        }
+
+        for (const indicator of this.#container.querySelectorAll(
+            ".library-favorite-indicator"
+        )) {
+            const node = indicator.closest(".library-node");
+            const type = node?.dataset.libraryType;
+            const id = node?.dataset.libraryId;
+            let tracks = [];
+            if (type === "directory") {
+                tracks = this.#getDirectoryTracks(id);
+            }
+            else if (type === "album") {
+                tracks = this.#getDirectoryTracks(
+                    node.dataset.libraryDirectory
+                );
+            }
+            else {
+                const item = this.#findLibraryItem(type, id);
+                if (item) {
+                    tracks = this.#getNodeTracks(type, item);
+                }
+            }
+            this.#updateFavoriteIndicator(indicator, tracks);
+        }
     }
 
 
@@ -374,18 +518,44 @@ export default class LibraryPanel {
             .replace(/[\\/]/g, "\\")
             .replace(/\\+$/, "")
             .toLowerCase();
-        const prefix = `${directoryPath}\\`;
+        return [...(this.#directoryTrackIndex.get(directoryPath) ?? [])];
+    }
 
-        return this.#library.tracks
-            .filter(track => String(track.path)
+
+    #buildDirectoryTrackIndex() {
+        this.#directoryTrackIndex.clear();
+
+        for (const track of this.#library.tracks) {
+            const path = String(track.path ?? "")
                 .replace(/[\\/]/g, "\\")
-                .toLowerCase()
-                .startsWith(prefix)
-            )
-            .sort((a, b) => a.path.localeCompare(b.path, "es", {
+                .replace(/\\+$/, "")
+                .toLowerCase();
+            const lastSeparator = path.lastIndexOf("\\");
+            if (lastSeparator === -1) {
+                continue;
+            }
+            let directoryPath = path.slice(0, lastSeparator);
+
+            while (directoryPath) {
+                if (!this.#directoryTrackIndex.has(directoryPath)) {
+                    this.#directoryTrackIndex.set(directoryPath, []);
+                }
+                this.#directoryTrackIndex.get(directoryPath).push(track);
+
+                const separatorIndex = directoryPath.lastIndexOf("\\");
+                if (separatorIndex === -1) {
+                    break;
+                }
+                directoryPath = directoryPath.slice(0, separatorIndex);
+            }
+        }
+
+        for (const tracks of this.#directoryTrackIndex.values()) {
+            tracks.sort((a, b) => a.path.localeCompare(b.path, "es", {
                 numeric: true,
                 sensitivity: "base"
             }));
+        }
     }
 
 
