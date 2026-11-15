@@ -32,6 +32,8 @@ export default class PlayerSettings {
 
     // Clave utilizada en localStorage.
     static STORAGE_KEY = "bubaudio.settings";
+    static STARTUP_MODES = ["lastQueue", "artist", "album", "tracks50"];
+    static THEMES = ["dark", "light"];
 
     // Configuración por defecto.
     static DEFAULT_SETTINGS = {
@@ -45,6 +47,15 @@ export default class PlayerSettings {
         repeat: false,
         // Lista que se genera al terminar la cola.
         queueEndMode: null,
+        // Acción al iniciar el reproductor.
+        startupMode: "lastQueue",
+        // Tema de la interfaz.
+        theme: "dark",
+        // Anchura de los paneles laterales.
+        libraryPanelWidth: 300,
+        queuePanelWidth: 350,
+        // Última cola reproducida, almacenada como rutas.
+        lastQueue: null,
         // Fecha del último escaneo de la biblioteca.
         lastLibraryScan: null,
         // Visualizacion seleccionada
@@ -183,6 +194,38 @@ export default class PlayerSettings {
                 }
 
                 if (
+                    !PlayerSettings.STARTUP_MODES.includes(
+                        this.#settings.startupMode
+                    )
+                ) {
+                    this.#settings.startupMode = "lastQueue";
+                }
+
+                if (!PlayerSettings.THEMES.includes(this.#settings.theme)) {
+                    this.#settings.theme = "dark";
+                }
+
+                if (
+                    !Number.isInteger(this.#settings.libraryPanelWidth) ||
+                    this.#settings.libraryPanelWidth < 250 ||
+                    this.#settings.libraryPanelWidth > 600
+                ) {
+                    this.#settings.libraryPanelWidth = 300;
+                }
+
+                if (
+                    !Number.isInteger(this.#settings.queuePanelWidth) ||
+                    this.#settings.queuePanelWidth < 280 ||
+                    this.#settings.queuePanelWidth > 650
+                ) {
+                    this.#settings.queuePanelWidth = 350;
+                }
+
+                if (!this.#isValidLastQueue(this.#settings.lastQueue)) {
+                    this.#settings.lastQueue = null;
+                }
+
+                if (
                     !Array.isArray(storedSettings.musicPaths) ||
                     storedSettings.musicPath ||
                     JSON.stringify(storedSettings.musicPaths) !==
@@ -198,6 +241,33 @@ export default class PlayerSettings {
         }
 
         return this.#settings;
+    }
+
+    #isValidLastQueue(queue) {
+        return queue === null || (
+            typeof queue === "object" &&
+            !Array.isArray(queue) &&
+            Array.isArray(queue.trackPaths) &&
+            queue.trackPaths.length > 0 &&
+            queue.trackPaths.every(path => typeof path === "string") &&
+            Number.isInteger(queue.currentIndex) &&
+            queue.currentIndex >= 0 &&
+            queue.currentIndex < queue.trackPaths.length &&
+            Array.isArray(queue.shuffleOrder) &&
+            (
+                queue.shuffleOrder.length === 0 ||
+                (
+                    queue.shuffleOrder.length === queue.trackPaths.length &&
+                    new Set(queue.shuffleOrder).size ===
+                        queue.trackPaths.length &&
+                    queue.shuffleOrder.every(index =>
+                        Number.isInteger(index) &&
+                        index >= 0 &&
+                        index < queue.trackPaths.length
+                    )
+                )
+            )
+        );
     }
 
 
@@ -306,6 +376,79 @@ export default class PlayerSettings {
         }
 
         this.#settings.queueEndMode = value;
+        this.save();
+    }
+
+    get startupMode() {
+        return this.#settings.startupMode;
+    }
+
+    set startupMode(value) {
+        if (!PlayerSettings.STARTUP_MODES.includes(value)) {
+            throw new RangeError(`Modo de inicio no válido: ${value}`);
+        }
+
+        this.#settings.startupMode = value;
+        this.save();
+    }
+
+    get theme() {
+        return this.#settings.theme;
+    }
+
+    set theme(value) {
+        if (!PlayerSettings.THEMES.includes(value)) {
+            throw new RangeError(`Tema no válido: ${value}`);
+        }
+
+        this.#settings.theme = value;
+        this.save();
+    }
+
+    get libraryPanelWidth() {
+        return this.#settings.libraryPanelWidth;
+    }
+
+    set libraryPanelWidth(value) {
+        if (!Number.isInteger(value) || value < 250 || value > 600) {
+            throw new RangeError(
+                `Anchura del panel de biblioteca no válida: ${value}`
+            );
+        }
+
+        this.#settings.libraryPanelWidth = value;
+        this.save();
+    }
+
+    get queuePanelWidth() {
+        return this.#settings.queuePanelWidth;
+    }
+
+    set queuePanelWidth(value) {
+        if (!Number.isInteger(value) || value < 280 || value > 650) {
+            throw new RangeError(
+                `Anchura del panel de lista no válida: ${value}`
+            );
+        }
+
+        this.#settings.queuePanelWidth = value;
+        this.save();
+    }
+
+    get lastQueue() {
+        return this.#settings.lastQueue
+            ? structuredClone(this.#settings.lastQueue)
+            : null;
+    }
+
+    set lastQueue(value) {
+        if (!this.#isValidLastQueue(value)) {
+            throw new TypeError("El estado de la última cola no es válido");
+        }
+
+        this.#settings.lastQueue = value
+            ? structuredClone(value)
+            : null;
         this.save();
     }
 

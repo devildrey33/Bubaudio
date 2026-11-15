@@ -9,13 +9,21 @@ export default class LibraryPanel {
     #library;
     #player;
     #queuePanel;
+    #playlistStore;
     #contextMenu;
 
-    constructor(library, player, queuePanel, containerId = "library-tree") {
+    constructor(
+        library,
+        player,
+        queuePanel,
+        playlistStore,
+        containerId = "library-tree"
+    ) {
 
         this.#library = library;
         this.#player = player;
         this.#queuePanel = queuePanel;
+        this.#playlistStore = playlistStore;
         this.#container = document.getElementById(containerId);
 
         if (!this.#container) {
@@ -41,6 +49,7 @@ export default class LibraryPanel {
     render() {
 
         this.#container.replaceChildren();
+        this.#container.appendChild(this.#createPlaylistsNode());
 
         if (this.#library.artistCount === 0) {
             const emptyMessage = document.createElement("div");
@@ -62,6 +71,77 @@ export default class LibraryPanel {
                 this.#createArtistNode(artist)
             );
         }
+    }
+
+    #createPlaylistsNode() {
+        const node = document.createElement("details");
+        node.className = "library-node library-playlists";
+
+        const label = document.createElement("summary");
+        label.className = "library-row";
+        this.#appendRowContent(label, "▤", "Listas guardadas");
+        node.appendChild(label);
+
+        const children = document.createElement("div");
+        children.className = "library-children library-playlist-list";
+        children.setAttribute("role", "listbox");
+        children.setAttribute("aria-label", "Listas guardadas");
+        const playlists = this.#playlistStore.playlists.sort((first, second) =>
+            first.name.localeCompare(second.name, "es", {
+                numeric: true,
+                sensitivity: "base"
+            })
+        );
+        node.open = playlists.length > 0;
+
+        if (playlists.length === 0) {
+            const emptyMessage = document.createElement("div");
+            emptyMessage.className = "library-empty library-playlist-empty";
+            emptyMessage.textContent = "No hay listas guardadas";
+            children.appendChild(emptyMessage);
+        }
+
+        for (const playlist of playlists) {
+            const row = document.createElement("div");
+            row.className = "library-row library-playlist";
+            row.dataset.libraryType = "playlist";
+            row.dataset.libraryId = playlist.id;
+            row.setAttribute("role", "option");
+            row.setAttribute("aria-selected", "false");
+            row.setAttribute("tabindex", "0");
+            row.title =
+                `Doble clic para reproducir · ${playlist.tracks.length} canciones`;
+            this.#appendRowContent(row, "♫", playlist.name);
+
+            const count = document.createElement("span");
+            count.className = "library-playlist-count";
+            count.textContent = String(playlist.tracks.length);
+            row.appendChild(count);
+
+            row.addEventListener("click", () => {
+                for (const otherRow of children.querySelectorAll(
+                    ".library-playlist"
+                )) {
+                    otherRow.classList.remove("selected");
+                    otherRow.setAttribute("aria-selected", "false");
+                }
+                row.classList.add("selected");
+                row.setAttribute("aria-selected", "true");
+            });
+            row.addEventListener("dblclick", () => {
+                this.#playPlaylist(playlist);
+            });
+            row.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    this.#playPlaylist(playlist);
+                }
+            });
+            children.appendChild(row);
+        }
+
+        node.appendChild(children);
+        return node;
     }
 
 
@@ -230,6 +310,32 @@ export default class LibraryPanel {
 
         const type = node.dataset.libraryType;
         const id = node.dataset.libraryId;
+
+        if (type === "playlist") {
+            const playlist = this.#playlistStore.getById(id);
+            if (!playlist) {
+                return [];
+            }
+
+            return [
+                {
+                    label: "Reproducir lista",
+                    icon: "▶",
+                    action: () => this.#playPlaylist(playlist)
+                },
+                {
+                    label: "Añadir a cola",
+                    icon: "＋",
+                    action: () => this.#addTracksToQueue(playlist.tracks)
+                },
+                {
+                    label: "Eliminar lista",
+                    icon: "🗑",
+                    action: () => this.#removePlaylist(playlist)
+                }
+            ];
+        }
+
         const libraryItem = type === "directory"
             ? { path: id }
             : this.#findLibraryItem(type, id);
@@ -346,6 +452,7 @@ export default class LibraryPanel {
         }
 
         this.#refreshQueuePanel(queue);
+        this.#player.dispatchEvent(new Event("queuechanged"));
     }
 
 
@@ -361,6 +468,41 @@ export default class LibraryPanel {
         }
 
         this.#refreshQueuePanel(this.#player.queue);
+    }
+
+    async #playPlaylist(playlist) {
+        try {
+            await this.#player.playQueue(playlist.tracks);
+        }
+        catch (error) {
+            console.error(
+                `LibraryPanel: no se pudo reproducir la lista '${playlist.name}'`,
+                error
+            );
+            window.alert(
+                `No se pudo reproducir la lista '${playlist.name}': ${String(error)}`
+            );
+        }
+    }
+
+    async #removePlaylist(playlist) {
+        if (!window.confirm(`¿Eliminar la lista '${playlist.name}'?`)) {
+            return;
+        }
+
+        try {
+            await this.#playlistStore.remove(playlist.id);
+            this.render();
+        }
+        catch (error) {
+            console.error(
+                `LibraryPanel: no se pudo eliminar la lista '${playlist.name}'`,
+                error
+            );
+            window.alert(
+                `No se pudo eliminar la lista '${playlist.name}': ${String(error)}`
+            );
+        }
     }
 
 
@@ -384,5 +526,9 @@ export default class LibraryPanel {
                 error
             );
         }
+    }
+
+    refresh() {
+        this.render();
     }
 }

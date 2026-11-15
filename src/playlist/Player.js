@@ -90,23 +90,36 @@ export default class Player extends EventTarget {
     /**
      * Crea una cola nueva y comienza a reproducir.
      */
-    async playQueue(tracks, startIndex = 0) {
-        const wasGeneratingAtEnd = this.#queueEndMode !== null;
+    async playQueue(
+        tracks,
+        startIndex = 0,
+        { preserveQueueEndMode = false } = {}
+    ) {
+        if (!preserveQueueEndMode) {
+            const wasGeneratingAtEnd = this.#queueEndMode !== null;
 
-        this.#queueEndFactory = null;
-        this.#queueEndMode = null;
-        this.#queueFinished = false;
+            this.#queueEndFactory = null;
+            this.#queueEndMode = null;
 
-        if (wasGeneratingAtEnd) {
-            this.dispatchEvent(new CustomEvent("repeatchange", {
-                detail: {
-                    repeatMode: this.queue.repeatMode,
-                    queueEndMode: null
-                }
-            }));
+            if (wasGeneratingAtEnd) {
+                this.dispatchEvent(new CustomEvent("repeatchange", {
+                    detail: {
+                        repeatMode: this.queue.repeatMode,
+                        queueEndMode: null
+                    }
+                }));
+            }
         }
 
+        this.#queueFinished = false;
         this.queue.setTracks(tracks, startIndex);
+        this.dispatchEvent(new Event("queuechanged"));
+        await this.playCurrent();
+    }
+
+    async restoreQueue(tracks, startIndex, shuffleOrder) {
+        this.#queueFinished = false;
+        this.queue.restoreTracks(tracks, startIndex, shuffleOrder);
         this.dispatchEvent(new Event("queuechanged"));
         await this.playCurrent();
     }
@@ -212,7 +225,7 @@ export default class Player extends EventTarget {
     /**
      * Reproduce la canción actual de la cola.
      */
-    async playCurrent() {
+    async playCurrent({ autoplay = true } = {}) {
 
         console.log("currentIndex =", this.queue.currentIndex);
         console.log("currentItem =", this.queue.currentItem);
@@ -228,8 +241,10 @@ export default class Player extends EventTarget {
         console.log("PATH =", track.path);        
 
         await this.#audioAnalyzer.load(track.path);
-        await this.#audioAnalyzer.resume();
-        await this.#audioAnalyzer.play();
+        if (autoplay) {
+            await this.#audioAnalyzer.resume();
+            await this.#audioAnalyzer.play();
+        }
 
         this.dispatchEvent(new CustomEvent("trackchanged", {
             detail : {
@@ -515,5 +530,82 @@ export default class Player extends EventTarget {
         );
 
         return await this.playCurrent();
+    }
+
+    moveQueueItems(queueIds, destinationIndex) {
+        const changed = this.queue.moveMany(queueIds, destinationIndex);
+
+        if (changed) {
+            this.dispatchEvent(new Event("queuechanged"));
+        }
+
+        return changed;
+    }
+
+    async removeQueueItems(queueIds) {
+        const queueIdsToRemove = new Set(queueIds);
+        const currentQueueId = this.queue.currentQueueId;
+        const currentWasRemoved = queueIdsToRemove.has(currentQueueId);
+        const wasPlaying = !this.audio.paused;
+        let nextQueueId = null;
+
+        if (currentWasRemoved) {
+            const orderedQueueIds = this.queue.orderedItems.map(
+                item => item.queueId
+            );
+            const currentIndex = orderedQueueIds.indexOf(currentQueueId);
+            const remainingQueueIds = orderedQueueIds.filter(queueId =>
+                !queueIdsToRemove.has(queueId)
+            );
+            const followingQueueId = orderedQueueIds
+                .slice(currentIndex + 1)
+                .find(queueId => !queueIdsToRemove.has(queueId));
+            const previousQueueId = orderedQueueIds
+                .slice(0, currentIndex)
+                .reverse()
+                .find(queueId => !queueIdsToRemove.has(queueId));
+
+            nextQueueId = followingQueueId ??
+                (
+                    this.queue.repeatMode === "queue"
+                        ? remainingQueueIds[0]
+                        : previousQueueId
+                ) ??
+                remainingQueueIds[0] ??
+                null;
+        }
+
+        let changed = false;
+        for (const queueId of queueIdsToRemove) {
+            changed = this.queue.remove(queueId) || changed;
+        }
+
+        if (!changed) {
+            return false;
+        }
+
+        this.#queueFinished = false;
+        if (
+            currentWasRemoved &&
+            nextQueueId !== null &&
+            this.queue.currentQueueId !== nextQueueId
+        ) {
+            this.queue.setCurrentQueueId(
+                nextQueueId,
+                { recordHistory: false }
+            );
+        }
+
+        if (currentWasRemoved) {
+            this.stop();
+        }
+
+        this.dispatchEvent(new Event("queuechanged"));
+
+        if (currentWasRemoved && this.queue.currentTrack) {
+            await this.playCurrent({ autoplay: wasPlaying });
+        }
+
+        return true;
     }
 }

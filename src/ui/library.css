@@ -42,11 +42,11 @@
     color: #dce3ec;
     font-size: 13px;
     scrollbar-color: #495565 transparent;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
 }
 
 #library-tree::-webkit-scrollbar {
-    width: 8px;
+    width: 16px;
 }
 
 #library-tree::-webkit-scrollbar-track {
@@ -141,8 +141,44 @@
     cursor: pointer;
 }
 
+.library-playlist {
+    color: #d7c6a9;
+    cursor: pointer;
+}
+
+.library-playlist:hover {
+    background: rgba(255, 191, 105, 0.1);
+}
+
+.library-playlist.selected {
+    background: rgba(255, 177, 82, 0.2);
+    box-shadow: inset 3px 0 0 #ffc574;
+}
+
+.library-playlist:focus-visible {
+    outline: 1px solid rgba(255, 191, 105, 0.8);
+}
+
+.library-playlist-count {
+    flex: 0 0 auto;
+    min-width: 22px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    color: #ffc574;
+    background: rgba(255, 177, 82, 0.12);
+    font-size: 10px;
+    text-align: center;
+}
+
+.library-playlist-empty {
+    padding: 8px;
+    font-size: 12px;
+    text-align: left;
+}
+
 .library-track:hover .library-icon,
-.library-node > summary:hover .library-icon {
+.library-node > summary:hover .library-icon,
+.library-playlist:hover .library-icon {
     opacity: 1;
 }
 

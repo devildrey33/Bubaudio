@@ -10,6 +10,7 @@
 
     <link rel="stylesheet" href="./src/ui/controls.css">
     <link rel="stylesheet" href="./src/ui/queue.css">
+    <link rel="stylesheet" href="./src/ui/playlistSaveDialog.css">
     <link rel="stylesheet" href="./src/ui/library.css">
     <link rel="stylesheet" href="./src/ui/shaderSelector.css">
     <link rel="stylesheet" href="./src/ui/contextMenu.css">
@@ -18,6 +19,9 @@
     <link rel="stylesheet" href="./src/ui/randomListTooltip.css">
     <link rel="stylesheet" href="./src/ui/libraryScanProgressPanel.css">
     <link rel="stylesheet" href="./src/ui/musicPathsSetupPanel.css">
+    <link rel="stylesheet" href="./src/ui/optionsPanel.css">
+    <link rel="stylesheet" href="./src/ui/themes.css">
+    <link rel="stylesheet" href="./src/ui/panelResize.css">
 </head>
 
 <body>
@@ -78,26 +82,61 @@
         </section>
     </div>
 
-    <div id="music-path-setup-overlay" hidden>
-        <section class="music-path-setup-panel"
+    <div id="options-overlay" hidden>
+        <section class="options-panel"
                  role="dialog"
                  aria-modal="true"
-                 aria-labelledby="music-path-setup-title">
-            <div class="music-path-setup-heading">
-                <span class="music-path-setup-icon" aria-hidden="true">♫</span>
-                <div>
-                    <h2 id="music-path-setup-title">Configura tu biblioteca</h2>
-                    <p>Añade uno o más directorios raíz de música para empezar.</p>
-                </div>
+                 aria-labelledby="options-title">
+            <header class="options-header">
+                <h2 id="options-title">Opciones</h2>
+                <button id="options-close"
+                        type="button"
+                        title="Guardar y cerrar"
+                        aria-label="Guardar y cerrar opciones">×</button>
+            </header>
+            <div class="options-content">
+                <section class="options-section">
+                    <h3>Directorios de música</h3>
+                    <p>Añade o quita las carpetas raíz de tu biblioteca.</p>
+                    <div id="music-path-list" class="music-path-list"></div>
+                    <p id="music-path-setup-status" role="status"></p>
+                    <button id="music-path-add" type="button">
+                        Añadir directorio
+                    </button>
+                </section>
+                <section class="options-section">
+                    <h3>Al iniciar el reproductor</h3>
+                    <label for="startup-mode">
+                        Acción de inicio
+                    </label>
+                    <select id="startup-mode">
+                        <option value="lastQueue">
+                            Cargar la última lista y reproducir
+                        </option>
+                        <option value="artist">
+                            Generar un grupo aleatorio y reproducir
+                        </option>
+                        <option value="album">
+                            Generar un disco aleatorio y reproducir
+                        </option>
+                        <option value="tracks50">
+                            Generar 50 canciones aleatorias y reproducir
+                        </option>
+                    </select>
+                </section>
+                <section class="options-section">
+                    <h3>Aspecto</h3>
+                    <label for="ui-theme">Tema de la interfaz</label>
+                    <select id="ui-theme">
+                        <option value="dark">Oscuro</option>
+                        <option value="light">Luminoso</option>
+                    </select>
+                </section>
             </div>
-            <div id="music-path-list" class="music-path-list"></div>
-            <p id="music-path-setup-status" role="status"></p>
-            <div class="music-path-setup-actions">
-                <button id="music-path-add" type="button">
-                    Seleccionar directorio
-                </button>
-                <button id="music-path-continue" type="button" disabled>
-                    Continuar
+            <p id="options-status" role="status"></p>
+            <div class="options-actions">
+                <button id="options-save" type="button">
+                    Guardar y cerrar
                 </button>
             </div>
         </section>
@@ -108,6 +147,15 @@
     <div id="library-trigger">
 
         <div id="library-panel">
+
+            <div id="library-resize-handle"
+                 class="panel-resize-handle panel-resize-handle-right"
+                 role="separator"
+                 aria-label="Cambiar ancho del panel de biblioteca"
+                 aria-orientation="vertical"
+                 aria-valuemin="250"
+                 aria-valuemax="600"
+                 tabindex="0"></div>
 
             <div class="panel-header">
                 Biblioteca
@@ -126,8 +174,23 @@
 
         <div id="queue-panel">
 
+            <div id="queue-resize-handle"
+                 class="panel-resize-handle panel-resize-handle-left"
+                 role="separator"
+                 aria-label="Cambiar ancho del panel de cola"
+                 aria-orientation="vertical"
+                 aria-valuemin="280"
+                 aria-valuemax="650"
+                 tabindex="0"></div>
+
             <div class="panel-header">
                 <span>Cola de reproducción</span>
+                <button id="queue-save-button"
+                        type="button"
+                        title="Guardar cola como lista"
+                        aria-label="Guardar cola como lista">
+                    ▣
+                </button>
                 <button id="queue-generate-button"
                         type="button"
                         title="Generar una lista aleatoria"
@@ -137,13 +200,40 @@
                 </button>
             </div>
 
-            <div id="queue-list">
+            <div id="queue-list"
+                 role="listbox"
+                 aria-label="Cola de reproducción"
+                 aria-multiselectable="true"
+                 tabindex="0">
 
             </div>
 
         </div>
 
     </div>
+
+    <dialog id="playlist-save-dialog"
+            class="playlist-save-dialog"
+            aria-labelledby="playlist-save-title">
+        <form id="playlist-save-form">
+            <h2 id="playlist-save-title">Guardar lista</h2>
+            <label for="playlist-save-name">Nombre</label>
+            <input id="playlist-save-name"
+                   name="name"
+                   type="text"
+                   maxlength="100"
+                   autocomplete="off"
+                   required>
+            <p id="playlist-save-status" role="status"></p>
+            <div class="playlist-save-actions">
+                <button id="playlist-save-cancel"
+                        type="button">
+                    Cancelar
+                </button>
+                <button type="submit">Guardar</button>
+            </div>
+        </form>
+    </dialog>
 
     <!-- CONTROLES -->
     <div id="controls-trigger">
@@ -215,11 +305,17 @@
                     title="Opciones de repetición y listas">
                 🔁
             </button>
-            <button id="btn-select-folder"
+            <button id="btn-options"
                     class="player-button"
-                    title="Añadir directorio de música"
-                    aria-label="Añadir directorio de música">
-                📁
+                    title="Opciones"
+                    aria-label="Opciones">
+                <svg viewBox="0 0 24 24"
+                     width="23"
+                     height="23"
+                     aria-hidden="true">
+                    <path fill="currentColor"
+                          d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.12.55-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.68 8.87a.5.5 0 0 0 .12.61l2.03 1.58c-.05.3-.08.62-.08.94s.03.64.08.94L2.8 14.52a.5.5 0 0 0-.12.61l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.04.7 1.62.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.58-.24 1.12-.55 1.62-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.61l-2.02-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
+                </svg>
             </button>
 
 

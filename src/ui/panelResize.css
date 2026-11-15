@@ -1,0 +1,61 @@
+.panel-resize-handle {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    cursor: ew-resize;
+    touch-action: none;
+}
+
+.panel-resize-handle-right {
+    right: -6px;
+}
+
+.panel-resize-handle-left {
+    left: -6px;
+}
+
+.panel-resize-handle::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 3px;
+    height: 48px;
+    border-radius: 3px;
+    background: rgba(121, 184, 255, 0.6);
+    content: "";
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    transition: opacity 120ms ease;
+}
+
+.panel-resize-handle:hover::after,
+.panel-resize-handle:focus-visible::after,
+.is-resizing > .panel-resize-handle::after {
+    opacity: 1;
+}
+
+.panel-resize-handle:focus-visible {
+    outline: none;
+}
+
+#library-trigger #library-panel.is-resizing {
+    left: 0;
+}
+
+#queue-trigger #queue-panel.is-resizing {
+    right: 0;
+}
+
+html.panel-resizing,
+html.panel-resizing * {
+    cursor: ew-resize !important;
+    user-select: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-resize-handle::after {
+        transition: none;
+    }
+}

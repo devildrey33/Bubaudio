@@ -129,6 +129,34 @@ export default class PlaybackQueue {
         this.#rebuildShuffle();
     }
 
+    restoreTracks(tracks, startIndex, shuffleOrder = []) {
+        this.setTracks(tracks, startIndex);
+
+        if (!this.shuffle || this.items.length === 0) {
+            return;
+        }
+
+        const validOrder = Array.isArray(shuffleOrder) &&
+            shuffleOrder.length === this.items.length &&
+            new Set(shuffleOrder).size === this.items.length &&
+            shuffleOrder.every(index =>
+                Number.isInteger(index) &&
+                index >= 0 &&
+                index < this.items.length
+            );
+
+        if (!validOrder) {
+            return;
+        }
+
+        this.shuffleOrder = shuffleOrder.map(
+            index => this.items[index].queueId
+        );
+        this.shuffleIndex = this.shuffleOrder.indexOf(
+            this.currentQueueId
+        );
+    }
+
 
     /**
      * Vacía completamente la cola.
@@ -266,6 +294,60 @@ export default class PlaybackQueue {
         this.items.splice(destinationIndex, 0, item);
 
         this.#syncShuffle();
+
+        return true;
+    }
+
+    moveMany(queueIds, destinationIndex) {
+        if (!Number.isInteger(destinationIndex)) {
+            throw new RangeError(
+                `Índice de destino no válido: ${destinationIndex}`
+            );
+        }
+
+        const selectedIds = new Set(queueIds);
+        const orderedItems = this.orderedItems;
+        const movingItems = orderedItems.filter(item =>
+            selectedIds.has(item.queueId)
+        );
+
+        if (movingItems.length === 0) {
+            return false;
+        }
+
+        const insertIndex = Math.max(
+            0,
+            Math.min(destinationIndex, orderedItems.length)
+        );
+        const movingIds = new Set(
+            movingItems.map(item => item.queueId)
+        );
+        const movingBeforeIndex = orderedItems
+            .slice(0, insertIndex)
+            .filter(item => movingIds.has(item.queueId))
+            .length;
+        const remainingItems = orderedItems.filter(item =>
+            !movingIds.has(item.queueId)
+        );
+        const adjustedIndex = insertIndex - movingBeforeIndex;
+
+        remainingItems.splice(adjustedIndex, 0, ...movingItems);
+
+        if (remainingItems.every(
+            (item, index) => item.queueId === orderedItems[index].queueId
+        )) {
+            return false;
+        }
+
+        if (this.shuffle) {
+            this.shuffleOrder = remainingItems.map(item => item.queueId);
+            this.shuffleIndex = this.shuffleOrder.indexOf(
+                this.currentQueueId
+            );
+        }
+        else {
+            this.items = remainingItems;
+        }
 
         return true;
     }
@@ -572,7 +654,7 @@ export default class PlaybackQueue {
     /**
      * Selecciona una canción de la cola mediante su índice.
      */
-    setCurrentIndex(index) {
+    setCurrentIndex(index, { recordHistory = true } = {}) {
 
         if (index < 0 || index >= this.items.length) {
             return false;
@@ -582,6 +664,7 @@ export default class PlaybackQueue {
 
         if (
             this.shuffle &&
+            recordHistory &&
             this.currentQueueId !== null &&
             this.currentQueueId !== nextQueueId
         ) {
@@ -599,7 +682,7 @@ export default class PlaybackQueue {
         return true;
     }
 
-    setCurrentQueueId(queueId) {
+    setCurrentQueueId(queueId, options) {
 
         const index = this.items.findIndex(
             item => item.queueId === queueId
@@ -609,7 +692,7 @@ export default class PlaybackQueue {
             return false;
         }
 
-        return this.setCurrentIndex(index);
+        return this.setCurrentIndex(index, options);
     }
     
 }

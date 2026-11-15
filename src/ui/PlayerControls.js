@@ -27,13 +27,13 @@ export default class PlayerControls {
     #btnStop;
     #btnPrev;
     #btnNext;
-    #btnFolder;
+    #btnOptions;
     #btnShuffle;
     #btnRepeat;
 
     #library;
     #repeatMenu;
-    #onMusicPathsChanged;
+    #onOpenOptions;
 
     //--------------------------------------------------------------------------
     // CONTROLES DE PROGRESO
@@ -67,14 +67,14 @@ export default class PlayerControls {
         settings,
         renderer,
         library,
-        onMusicPathsChanged = null
+        onOpenOptions = null
     ) {
 
         this.#player = player;
         this.#settings = settings;
         this.#renderer = renderer;
         this.#library = library;
-        this.#onMusicPathsChanged = onMusicPathsChanged;
+        this.#onOpenOptions = onOpenOptions;
 
         this.#cacheDom();
         this.#repeatMenu = new ContextMenu();
@@ -98,7 +98,7 @@ export default class PlayerControls {
         this.#btnStop = document.getElementById("btn-stop");
         this.#btnPrev = document.getElementById("btn-prev");
         this.#btnNext = document.getElementById("btn-next");
-        this.#btnFolder = document.getElementById("btn-select-folder");
+        this.#btnOptions = document.getElementById("btn-options");
         this.#btnShuffle = document.getElementById("btn-shuffle");
         this.#btnRepeat = document.getElementById("btn-repeat");
 
@@ -149,9 +149,9 @@ export default class PlayerControls {
         this.#progressBar.addEventListener("input", () => this.#onSeek());
         this.#volumeBar.addEventListener("input", () => this.#onVolume());
 
-        this.#btnFolder.addEventListener(
+        this.#btnOptions.addEventListener(
             "click",
-            () => this.#onSelectMusicPath()
+            () => this.#onOpenOptions?.()
         );
 
         this.#btnShaderPrev.addEventListener("click", () => this.#onPreviousShader());
@@ -174,30 +174,6 @@ export default class PlayerControls {
 
         this.#updatePlayButton();
     }
-
-    async #onSelectMusicPath() {
-        try {
-            const selection = await this.#settings.selectFolder();
-            if (!selection) {
-                return;
-            }
-
-            await this.#library.scan(this.#settings.musicPaths);
-            if (this.#onMusicPathsChanged) {
-                await this.#onMusicPathsChanged();
-            }
-        }
-        catch (error) {
-            console.error(
-                "No se pudo actualizar la biblioteca de música",
-                error
-            );
-            window.alert(
-                `No se pudo actualizar la biblioteca de música: ${String(error)}`
-            );
-        }
-    }
-
 
     /**
      * Detiene la reproducción.
@@ -397,6 +373,45 @@ export default class PlayerControls {
         return tracks.slice(0, 50);
     }
 
+    async startWithRandomList(mode) {
+        const options = {
+            artist: {
+                label: "Grupo aleatorio",
+                factory: () => this.#getRandomArtistTracks()
+            },
+            album: {
+                label: "Disco aleatorio",
+                factory: () => this.#getRandomAlbumTracks()
+            },
+            tracks50: {
+                label: "50 canciones aleatorias",
+                factory: () => this.#getRandomTracks()
+            }
+        };
+        const option = options[mode];
+
+        if (!option) {
+            throw new RangeError(`Modo de inicio no válido: ${mode}`);
+        }
+
+        const tracks = await option.factory();
+        if (tracks.length === 0) {
+            throw new Error(
+                `No hay canciones disponibles para: ${option.label}.`
+            );
+        }
+
+        await this.#player.playQueue(
+            tracks,
+            0,
+            { preserveQueueEndMode: true }
+        );
+        this.#player.dispatchEvent(new CustomEvent(
+            "randomlistgenerated",
+            { detail: { mode, label: option.label } }
+        ));
+    }
+
 
     async #generateAfterQueue(
         mode,
@@ -435,8 +450,8 @@ export default class PlayerControls {
             await getCurrentWindow().close();
         }
         catch (error) {
-            console.error("No se pudo cerrar BubAudio", error);
-            window.alert("No se pudo cerrar BubAudio.");
+            console.error("No se pudo cerrar Bubaudio", error);
+            window.alert("No se pudo cerrar Bubaudio.");
         }
     }
 

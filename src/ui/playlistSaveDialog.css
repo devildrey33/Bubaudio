@@ -1,0 +1,91 @@
+.playlist-save-dialog {
+    width: min(420px, calc(100vw - 32px));
+    padding: 0;
+    border: 1px solid rgba(151, 170, 194, 0.28);
+    border-radius: 14px;
+    color: #e5eaf1;
+    background: rgba(24, 29, 37, 0.98);
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.52);
+    font-family: "Segoe UI", sans-serif;
+}
+
+.playlist-save-dialog::backdrop {
+    background: rgba(5, 8, 12, 0.62);
+    backdrop-filter: blur(3px);
+}
+
+.playlist-save-dialog form {
+    display: grid;
+    gap: 12px;
+    padding: 22px;
+}
+
+.playlist-save-dialog h2 {
+    margin: 0 0 4px;
+    color: #f3f6fa;
+    font-size: 19px;
+}
+
+.playlist-save-dialog label {
+    color: #aebaca;
+    font-size: 13px;
+}
+
+.playlist-save-dialog input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 11px;
+    border: 1px solid rgba(151, 170, 194, 0.3);
+    border-radius: 8px;
+    color: #e5eaf1;
+    background: rgba(255, 255, 255, 0.06);
+    font: inherit;
+}
+
+.playlist-save-dialog input:focus-visible {
+    outline: 2px solid rgba(121, 184, 255, 0.75);
+    outline-offset: 1px;
+}
+
+#playlist-save-status {
+    min-height: 18px;
+    margin: 0;
+    color: #ffbf69;
+    font-size: 12px;
+}
+
+.playlist-save-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.playlist-save-actions button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(151, 170, 194, 0.28);
+    border-radius: 8px;
+    color: #dce3ec;
+    background: rgba(255, 255, 255, 0.06);
+    font: inherit;
+    cursor: pointer;
+}
+
+.playlist-save-actions button[type="submit"] {
+    border-color: rgba(121, 184, 255, 0.55);
+    color: #f4f9ff;
+    background: linear-gradient(135deg, #388ad3, #2565a4);
+}
+
+.playlist-save-actions button:hover,
+.playlist-save-actions button:focus-visible {
+    outline: none;
+    border-color: rgba(121, 184, 255, 0.8);
+}
+
+.playlist-save-actions button:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}

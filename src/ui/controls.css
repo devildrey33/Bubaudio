@@ -392,10 +392,11 @@ body {
 
     position: fixed;
 
-    left: -300px;
+    left: calc(-1 * var(--library-panel-width, 300px));
     top: 0;
 
-    width: 300px;
+    width: var(--library-panel-width, 300px);
+    max-width: calc(100vw - 24px);
     height: 100vh;
 
     background: #181818;

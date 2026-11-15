@@ -1,32 +1,22 @@
 export default class MusicPathsSetupPanel {
 
     #settings;
-    #overlay;
     #pathList;
     #status;
     #addButton;
-    #continueButton;
-    #resolveSetup = null;
+    #onChanged;
+    #disabled = false;
 
-    constructor(settings) {
+    constructor(settings, onChanged = () => {}) {
         this.#settings = settings;
-        this.#overlay = document.getElementById("music-path-setup-overlay");
+        this.#onChanged = onChanged;
         this.#pathList = document.getElementById("music-path-list");
         this.#status = document.getElementById("music-path-setup-status");
         this.#addButton = document.getElementById("music-path-add");
-        this.#continueButton = document.getElementById(
-            "music-path-continue"
-        );
 
-        if (
-            !this.#overlay ||
-            !this.#pathList ||
-            !this.#status ||
-            !this.#addButton ||
-            !this.#continueButton
-        ) {
+        if (!this.#pathList || !this.#status || !this.#addButton) {
             throw new Error(
-                "MusicPathsSetupPanel: no se encontró el panel de configuración"
+                "MusicPathsSetupPanel: no se encontró el gestor de directorios"
             );
         }
 
@@ -34,50 +24,10 @@ export default class MusicPathsSetupPanel {
             "click",
             () => this.#onAddMusicPath()
         );
-        this.#continueButton.addEventListener(
-            "click",
-            () => this.#finishSetup()
-        );
-        this.#renderPaths();
+        this.render();
     }
 
-    waitForSetup() {
-        if (this.#settings.musicPaths.length > 0) {
-            return Promise.resolve();
-        }
-
-        this.#overlay.hidden = false;
-        this.#renderPaths();
-
-        return new Promise(resolve => {
-            this.#resolveSetup = resolve;
-        });
-    }
-
-    async #onAddMusicPath() {
-        this.#addButton.disabled = true;
-
-        try {
-            const result = await this.#settings.selectFolder();
-            if (result) {
-                this.#renderPaths(
-                    result.changed
-                        ? "Directorio añadido. Las rutas anidadas se consolidan automáticamente."
-                        : "Este directorio ya está cubierto por una carpeta configurada."
-                );
-            }
-        }
-        catch (error) {
-            console.error("No se pudo añadir el directorio de música", error);
-            this.#status.textContent =
-                `No se pudo seleccionar la carpeta: ${String(error)}`;
-        }
-        finally {
-            this.#addButton.disabled = false;
-        }
-    }
-
-    #renderPaths(statusMessage = null) {
+    render(statusMessage = null) {
         this.#pathList.replaceChildren();
 
         for (const path of this.#settings.musicPaths) {
@@ -96,29 +46,59 @@ export default class MusicPathsSetupPanel {
                 `Quitar directorio ${path}`
             );
             removeButton.addEventListener("click", () => {
-                this.#settings.removeMusicPath(path);
-                this.#renderPaths();
+                if (this.#settings.removeMusicPath(path)) {
+                    this.render("Directorio eliminado.");
+                    this.#onChanged();
+                }
             });
+            removeButton.disabled = this.#disabled;
 
             item.append(label, removeButton);
             this.#pathList.appendChild(item);
         }
 
         const pathCount = this.#settings.musicPaths.length;
-        this.#continueButton.disabled = pathCount === 0;
         this.#status.textContent = statusMessage ??
             (pathCount === 0
-                ? "Añade al menos un directorio raíz para continuar."
-                : `${pathCount} directorio(s) configurado(s). Puedes añadir más.`);
+                ? "Añade al menos un directorio raíz de música."
+                : `${pathCount} directorio(s) configurado(s).`);
     }
 
-    #finishSetup() {
-        if (this.#settings.musicPaths.length === 0) {
-            return;
-        }
+    setDisabled(disabled) {
+        this.#disabled = Boolean(disabled);
+        this.#addButton.disabled = this.#disabled;
 
-        this.#overlay.hidden = true;
-        this.#resolveSetup?.();
-        this.#resolveSetup = null;
+        for (const button of this.#pathList.querySelectorAll("button")) {
+            button.disabled = this.#disabled;
+        }
+    }
+
+    async #onAddMusicPath() {
+        this.#addButton.disabled = true;
+
+        try {
+            const result = await this.#settings.selectFolder();
+            if (!result) {
+                return;
+            }
+
+            this.render(
+                result.changed
+                    ? "Directorio añadido. Las rutas anidadas se consolidan automáticamente."
+                    : "Este directorio ya está cubierto por una carpeta configurada."
+            );
+
+            if (result.changed) {
+                this.#onChanged();
+            }
+        }
+        catch (error) {
+            console.error("No se pudo añadir el directorio de música", error);
+            this.#status.textContent =
+                `No se pudo seleccionar la carpeta: ${String(error)}`;
+        }
+        finally {
+            this.#addButton.disabled = this.#disabled;
+        }
     }
 }
