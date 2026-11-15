@@ -137,6 +137,7 @@ export default class PlaybackQueue {
 
         this.items = [];
         this.currentQueueId = null;
+        this.history = [];
 
         this.shuffleOrder = [];
         this.shuffleIndex = -1;
@@ -293,7 +294,20 @@ export default class PlaybackQueue {
 
 
     hasPrevious() {
-        return this.history.length > 0;
+        if (this.items.length === 0) {
+            return false;
+        }
+
+        if (this.shuffle) {
+            return this.history.some(
+                queueId => this.#getItemByQueueId(queueId)
+            );
+        }
+
+        return (
+            this.#currentIndex() > 0 ||
+            (this.repeatMode === "queue" && this.items.length > 0)
+        );
     }
 
 
@@ -313,25 +327,25 @@ export default class PlaybackQueue {
 
     previous() {
 
-        if (this.history.length === 0) {
-            return null;
+        if (!this.shuffle) {
+            return this.#previousLinear();
         }
 
-        const previousQueueId = this.history.pop();
+        while (this.history.length > 0) {
+            const previousQueueId = this.history.pop();
+            const item = this.#getItemByQueueId(previousQueueId);
 
-        const item = this.#getItemByQueueId(previousQueueId);
+            if (!item) {
+                continue;
+            }
 
-        if (!item) {
-            return this.previous();
-        }
-
-        this.currentQueueId = previousQueueId;
-
-        if (this.shuffle) {
+            this.currentQueueId = previousQueueId;
             this.shuffleIndex = this.shuffleOrder.indexOf(previousQueueId);
+
+            return item.track;
         }
 
-        return item.track;
+        return null;
     }
 
 
@@ -348,6 +362,7 @@ export default class PlaybackQueue {
         }
 
         this.shuffle = enabled;
+        this.history = [];
 
         if (enabled) {
             this.#rebuildShuffle();
@@ -374,8 +389,6 @@ export default class PlaybackQueue {
 
         if (index < this.items.length - 1) {
 
-            this.#pushHistory();
-
             index++;
 
             this.currentQueueId = this.items[index].queueId;
@@ -384,8 +397,6 @@ export default class PlaybackQueue {
         }
 
         if (this.repeatMode === "queue") {
-
-            this.#pushHistory();
 
             this.currentQueueId = this.items[0].queueId;
 
@@ -567,7 +578,17 @@ export default class PlaybackQueue {
             return false;
         }
 
-        this.currentQueueId = this.items[index].queueId;
+        const nextQueueId = this.items[index].queueId;
+
+        if (
+            this.shuffle &&
+            this.currentQueueId !== null &&
+            this.currentQueueId !== nextQueueId
+        ) {
+            this.#pushHistory();
+        }
+
+        this.currentQueueId = nextQueueId;
 
         if (this.shuffle) {
             this.shuffleIndex = this.shuffleOrder.indexOf(

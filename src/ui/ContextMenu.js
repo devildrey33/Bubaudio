@@ -104,9 +104,7 @@ export default class ContextMenu {
         }
 
         this.#contextEvent = event;
-        this.#menu.replaceChildren(
-            ...items.map(item => this.#createItem(item))
-        );
+        this.setItems(items);
         this.#menu.hidden = false;
         this.#menu.style.left = `${event.clientX}px`;
         this.#menu.style.top = `${event.clientY}px`;
@@ -125,6 +123,32 @@ export default class ContextMenu {
         this.#menu.style.top = `${top}px`;
         this.#keepOpenElement = keepOpenElement;
         this.#keepOpenElement?.classList.add("context-menu-open");
+    }
+
+    setItems(items, openSubmenuIndex = null) {
+        if (!Array.isArray(items)) {
+            throw new TypeError("ContextMenu: los items deben ser un array");
+        }
+
+        this.#menu.replaceChildren(
+            ...items.map(item => this.#createItem(item))
+        );
+
+        if (openSubmenuIndex === null) {
+            return;
+        }
+
+        const entry = this.#menu.children[openSubmenuIndex];
+        const button = entry?.querySelector(".context-menu-button");
+        const submenu = entry?.querySelector(".context-submenu");
+
+        if (!button || !submenu) {
+            throw new RangeError("ContextMenu: el elemento no tiene submenú");
+        }
+
+        entry.classList.add("open");
+        button.setAttribute("aria-expanded", "true");
+        this.#positionSubmenu(entry, submenu);
     }
 
 
@@ -183,6 +207,15 @@ export default class ContextMenu {
             );
         }
 
+        if (
+            item.keepOpenAfterAction !== undefined &&
+            typeof item.keepOpenAfterAction !== "boolean"
+        ) {
+            throw new TypeError(
+                `ContextMenu: keepOpenAfterAction de '${item.label}' debe ser boolean`
+            );
+        }
+
         const entry = document.createElement("div");
         entry.className = "context-menu-entry";
         entry.setAttribute("role", "none");
@@ -230,9 +263,13 @@ export default class ContextMenu {
 
             button.addEventListener("pointerenter", openSubmenu);
             button.addEventListener("focus", openSubmenu);
-            button.addEventListener("click", (event) => {
+            button.addEventListener("click", async (event) => {
                 event.stopPropagation();
                 openSubmenu();
+
+                if (item.action) {
+                    await this.#runAction(button, item);
+                }
             });
 
             entry.addEventListener("pointerleave", () => {
@@ -245,32 +282,38 @@ export default class ContextMenu {
         else {
             button.addEventListener("click", async (event) => {
                 event.stopPropagation();
-
-                if (button.disabled || this.#actionPending) {
-                    return;
-                }
-
-                const contextEvent = this.#contextEvent;
-                button.disabled = true;
-                this.#actionPending = true;
-
-                try {
-                    await item.action?.(contextEvent);
-                }
-                catch (error) {
-                    console.error(
-                        `ContextMenu: falló la acción '${item.label}'`,
-                        error
-                    );
-                }
-                finally {
-                    this.#actionPending = false;
-                    this.hide();
-                }
+                await this.#runAction(button, item);
             });
         }
 
         return entry;
+    }
+
+    async #runAction(button, item) {
+        if (button.disabled || this.#actionPending) {
+            return;
+        }
+
+        const contextEvent = this.#contextEvent;
+        button.disabled = true;
+        this.#actionPending = true;
+
+        try {
+            await item.action?.(contextEvent);
+        }
+        catch (error) {
+            console.error(
+                `ContextMenu: falló la acción '${item.label}'`,
+                error
+            );
+        }
+        finally {
+            this.#actionPending = false;
+
+            if (!item.keepOpenAfterAction) {
+                this.hide();
+            }
+        }
     }
 
 

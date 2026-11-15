@@ -73,6 +73,7 @@ export default class PlayerControls {
         this.#volumeBar.value = this.#settings.volume * 100;
         this.#player.setVolume(this.#settings.volume);
         this.#registerEvents();
+        this.#restoreQueueEndMode();
         this.#updateShuffleButton();
         this.#updateRepeatButton();
         this.#populateShaders();
@@ -118,9 +119,13 @@ export default class PlayerControls {
         this.#btnRepeat.addEventListener("click", () => this.#openRepeatMenu());
 
         this.#player.addEventListener("shufflechange", () => {
+            this.#settings.shuffle = this.#player.queue.shuffle;
             this.#updateShuffleButton();
         });
         this.#player.addEventListener("repeatchange", () => {
+            this.#settings.repeat =
+                this.#player.queue.repeatMode !== "none";
+            this.#settings.queueEndMode = this.#player.queueEndMode;
             this.#updateRepeatButton();
         });
         this.#player.addEventListener("queuegenerationerror", (event) => {
@@ -177,7 +182,7 @@ export default class PlayerControls {
      * Reproduce la canción anterior.
      */
     async #onPrevious() {
-        await this.#player.previous();
+        await this.#player.restartOrPrevious();
     }
 
 
@@ -191,7 +196,6 @@ export default class PlayerControls {
     #onShuffle() {
         const enabled = !this.#player.queue.shuffle;
 
-        this.#settings.shuffle = enabled;
         this.#player.setShuffle(enabled);
     }
 
@@ -296,10 +300,36 @@ export default class PlayerControls {
 
 
     #setPlaybackMode(repeatMode, shuffle) {
-        this.#settings.repeat = repeatMode !== "none";
-        this.#settings.shuffle = shuffle;
         this.#player.setRepeatMode(repeatMode);
         this.#player.setShuffle(shuffle);
+    }
+
+    #restoreQueueEndMode() {
+        const options = {
+            artist: {
+                description: "grupo aleatorio",
+                factory: () => this.#getRandomArtistTracks()
+            },
+            album: {
+                description: "disco aleatorio",
+                factory: () => this.#getRandomAlbumTracks()
+            },
+            tracks50: {
+                description: "50 canciones aleatorias",
+                factory: () => this.#getRandomTracks()
+            }
+        };
+        const mode = this.#settings.queueEndMode;
+        const option = options[mode];
+
+        if (option) {
+            this.#generateAfterQueue(
+                mode,
+                option.factory,
+                option.description,
+                false
+            );
+        }
     }
 
 
@@ -334,7 +364,12 @@ export default class PlayerControls {
     }
 
 
-    async #generateAfterQueue(mode, factory, description) {
+    async #generateAfterQueue(
+        mode,
+        factory,
+        description,
+        generateIfEmpty = true
+    ) {
         try {
             await this.#player.setQueueEndMode(mode, async () => {
                 const tracks = await factory();
@@ -346,7 +381,7 @@ export default class PlayerControls {
                 }
 
                 return tracks;
-            });
+            }, { generateIfEmpty });
         }
         catch (error) {
             console.error(
@@ -446,8 +481,7 @@ export default class PlayerControls {
      */
     #updateNavigationButtons() {
 
-        this.#btnPrev.disabled =
-            !this.#player.queue.hasPrevious();
+        this.#btnPrev.disabled = !this.#player.canGoPrevious;
 
         this.#btnNext.disabled =
             !this.#player.queue.hasNext();

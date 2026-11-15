@@ -99,10 +99,21 @@ export default class Application {
 
         this.renderer = new Visualizer(this.audio);
         this.renderer.setShader(this.settings.shaderIndex);
-        this.renderer.canvas.addEventListener(
-            "dblclick",
-            () => this.#toggleFullscreen()
-        );
+        document.addEventListener("dblclick", (event) => {
+            const target = event.target;
+
+            if (
+                target instanceof Element &&
+                target.closest(
+                    "button, input, select, textarea, a, summary, " +
+                    ".queue-item, .library-row, [role='button'], [role='menuitem']"
+                )
+            ) {
+                return;
+            }
+
+            this.#toggleFullscreen();
+        });
         this.renderer.start();
 
         //======================================================================
@@ -117,7 +128,7 @@ export default class Application {
             this.library
         );
 
-        this.panelQueue = new QueuePanel();
+        this.panelQueue = new QueuePanel(this.player, this.library);
         this.player.addEventListener("queuechanged", () => {
             this.panelQueue.setQueue(this.player.queue);
 

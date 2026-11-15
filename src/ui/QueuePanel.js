@@ -1,16 +1,211 @@
+import ContextMenu from "./ContextMenu.js";
+
 export default class QueuePanel {
 
     #container;
     #queue;
+    #player;
+    #library;
     #currentQueueId = null;
+    #generateButton;
+    #generateMenu;
+    #artistSuggestions = [];
+    #albumSuggestions = [];
 
-    constructor(containerId = "queue-list") {
+    constructor(player, library, containerId = "queue-list") {
 
+        this.#player = player;
+        this.#library = library;
         this.#container = document.getElementById(containerId);
 
         if (!this.#container) {
             throw new Error(
                 `QueuePanel: no se encontró el contenedor '${containerId}'`
+            );
+        }
+
+        this.#generateButton = document.getElementById(
+            "queue-generate-button"
+        );
+
+        if (!this.#generateButton) {
+            throw new Error(
+                "QueuePanel: no se encontró el botón para generar listas"
+            );
+        }
+
+        this.#generateMenu = new ContextMenu();
+        this.#generateButton.addEventListener("click", () => {
+            this.#openGenerateMenu();
+        });
+
+        this.setQueue(this.#player.queue);
+    }
+
+    #openGenerateMenu() {
+        this.#refreshSuggestions();
+
+        const bounds = this.#generateButton.getBoundingClientRect();
+
+        this.#generateMenu.show({
+            clientX: bounds.left,
+            clientY: bounds.bottom
+        }, this.#getGenerateMenuItems(),
+        this.#container.closest("#queue-panel"));
+    }
+
+    #getGenerateMenuItems() {
+        return [
+            {
+                label: "Grupo aleatorio",
+                icon: "🎤",
+                disabled: this.#library.artistCount === 0,
+                children: [
+                    ...this.#artistSuggestions.map(artist => ({
+                        label: artist.name,
+                        icon: "🎤",
+                        action: () => this.#replaceWithRandomList(
+                            `grupo '${artist.name}'`,
+                            () => this.#library.getArtistTracks(artist.id)
+                        )
+                    })),
+                    {
+                        label: "Regenerar sugerencias",
+                        icon: "↻",
+                        action: () => this.#regenerateSuggestions("artist"),
+                        keepOpenAfterAction: true
+                    }
+                ],
+                action: () => this.#replaceWithRandomList(
+                    "grupo aleatorio",
+                    () => this.#getRandomArtistTracks()
+                )
+            },
+            {
+                label: "Disco aleatorio",
+                icon: "💿",
+                disabled: this.#library.albumCount === 0,
+                children: [
+                    ...this.#albumSuggestions.map(album => ({
+                        label: album.artist
+                            ? `${album.title} — ${album.artist}`
+                            : album.title,
+                        icon: "💿",
+                        action: () => this.#replaceWithRandomList(
+                            `disco '${album.title}'`,
+                            () => this.#library.getAlbumTracks(album.id)
+                        )
+                    })),
+                    {
+                        label: "Regenerar sugerencias",
+                        icon: "↻",
+                        action: () => this.#regenerateSuggestions("album"),
+                        keepOpenAfterAction: true
+                    }
+                ],
+                action: () => this.#replaceWithRandomList(
+                    "disco aleatorio",
+                    () => this.#getRandomAlbumTracks()
+                )
+            },
+            {
+                label: "50 canciones aleatorias",
+                icon: "🎵",
+                disabled: this.#library.trackCount === 0,
+                action: () => this.#replaceWithRandomList(
+                    "50 canciones aleatorias",
+                    () => this.#getRandomTracks()
+                )
+            }
+        ];
+    }
+
+    #refreshSuggestions() {
+        this.#artistSuggestions = this.#pickSuggestions(
+            this.#library.artists
+        );
+        this.#albumSuggestions = this.#pickSuggestions(
+            this.#library.albums
+        );
+    }
+
+    #pickSuggestions(items) {
+        const shuffled = [...items];
+
+        for (let index = shuffled.length - 1; index > 0; index--) {
+            const randomIndex = Math.floor(Math.random() * (index + 1));
+            [shuffled[index], shuffled[randomIndex]] =
+                [shuffled[randomIndex], shuffled[index]];
+        }
+
+        return shuffled.slice(0, 5);
+    }
+
+    #regenerateSuggestions(type) {
+        if (type === "artist") {
+            this.#artistSuggestions = this.#pickSuggestions(
+                this.#library.artists
+            );
+        }
+        else {
+            this.#albumSuggestions = this.#pickSuggestions(
+                this.#library.albums
+            );
+        }
+
+        this.#generateMenu.setItems(
+            this.#getGenerateMenuItems(),
+            type === "artist" ? 0 : 1
+        );
+    }
+
+    #getRandomArtistTracks() {
+        const artist = this.#library.randomArtist();
+
+        return artist
+            ? this.#library.getArtistTracks(artist.id)
+            : [];
+    }
+
+    #getRandomAlbumTracks() {
+        const album = this.#library.randomAlbum();
+
+        return album
+            ? this.#library.getAlbumTracks(album.id)
+            : [];
+    }
+
+    #getRandomTracks() {
+        const tracks = [...this.#library.tracks];
+
+        for (let index = tracks.length - 1; index > 0; index--) {
+            const randomIndex = Math.floor(Math.random() * (index + 1));
+            [tracks[index], tracks[randomIndex]] =
+                [tracks[randomIndex], tracks[index]];
+        }
+
+        return tracks.slice(0, 50);
+    }
+
+    async #replaceWithRandomList(description, factory) {
+        try {
+            const tracks = await factory();
+
+            if (!tracks.length) {
+                throw new Error(
+                    `No hay canciones para generar: ${description}.`
+                );
+            }
+
+            await this.#player.playQueue(tracks);
+        }
+        catch (error) {
+            console.error(
+                `QueuePanel: no se pudo generar la lista de ${description}`,
+                error
+            );
+            window.alert(
+                `No se pudo generar la lista de ${description}: ${String(error)}`
             );
         }
     }
@@ -27,6 +222,10 @@ export default class QueuePanel {
         this.#container.innerHTML = "";
 
         if (!this.#queue?.items?.length) {
+            const emptyMessage = document.createElement("div");
+            emptyMessage.className = "queue-empty";
+            emptyMessage.textContent = "La cola está vacía";
+            this.#container.appendChild(emptyMessage);
             return;
         }
 
@@ -41,27 +240,27 @@ export default class QueuePanel {
                 element.classList.add("active");
             }
 
-            element.innerHTML = `
-                <div class="queue-index">
-                    ${index + 1}
-                </div>
+            const queueIndex = document.createElement("div");
+            queueIndex.className = "queue-index";
+            queueIndex.textContent = String(index + 1);
 
-                <div class="queue-main">
+            const main = document.createElement("div");
+            main.className = "queue-main";
 
-                    <div class="queue-title">
-                        ${queueItem.track.title ?? ""}
-                    </div>
+            const title = document.createElement("div");
+            title.className = "queue-title";
+            title.textContent = queueItem.track.title ?? "";
 
-                    <div class="queue-subtitle">
-                        ${queueItem.track.artist ?? ""}
-                    </div>
+            const subtitle = document.createElement("div");
+            subtitle.className = "queue-subtitle";
+            subtitle.textContent = queueItem.track.artist ?? "";
 
-                </div>
-            `;
+            main.append(title, subtitle);
+            element.append(queueIndex, main);
 
             // Evento click del item de la lista
             element.addEventListener("click", async () => {
-                await app.player.playQueueItem(
+                await this.#player.playQueueItem(
                     queueItem.queueId
                 );
                 this.select(queueItem.queueId);

@@ -74,7 +74,7 @@ export default class LibraryPanel {
 
         const artistLabel = document.createElement("summary");
         artistLabel.className = "library-row";
-        artistLabel.textContent = artist.name;
+        this.#appendRowContent(artistLabel, "🎤", artist.name);
         artistNode.appendChild(artistLabel);
 
         const albums = this.#library
@@ -107,7 +107,7 @@ export default class LibraryPanel {
 
         const albumLabel = document.createElement("summary");
         albumLabel.className = "library-row";
-        albumLabel.textContent = album.title;
+        this.#appendRowContent(albumLabel, "💿", album.title);
         albumNode.appendChild(albumLabel);
 
         const tracks = this.#library
@@ -125,12 +125,25 @@ export default class LibraryPanel {
             trackRow.className = "library-row library-track";
             trackRow.dataset.libraryType = "track";
             trackRow.dataset.libraryId = track.id;
-            trackRow.textContent = track.title;
+            this.#appendRowContent(trackRow, "🎵", track.title);
             trackList.appendChild(trackRow);
         }
 
         albumNode.appendChild(trackList);
         return albumNode;
+    }
+
+    #appendRowContent(row, iconText, labelText) {
+        const icon = document.createElement("span");
+        icon.className = "library-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = iconText;
+
+        const label = document.createElement("span");
+        label.className = "library-label";
+        label.textContent = labelText;
+
+        row.append(icon, label);
     }
 
 

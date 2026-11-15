@@ -12,6 +12,8 @@
 // Player
 import PlaybackQueue from "./PlaybackQueue.js";
 
+const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
+
 export default class Player extends EventTarget {
 
     #audioAnalyzer;
@@ -58,6 +60,13 @@ export default class Player extends EventTarget {
         return this.audio.currentTime;
     }
 
+    get canGoPrevious() {
+        return (
+            this.currentTime > PREVIOUS_RESTART_THRESHOLD_SECONDS ||
+            this.queue.hasPrevious()
+        );
+    }
+
 
     get duration() {
         return this.audio.duration || 0;
@@ -102,7 +111,7 @@ export default class Player extends EventTarget {
         await this.playCurrent();
     }
 
-    async setQueueEndMode(mode, factory) {
+    async setQueueEndMode(mode, factory, { generateIfEmpty = true } = {}) {
         if (!["artist", "album", "tracks50"].includes(mode)) {
             throw new RangeError(`Modo de generación no válido: ${mode}`);
         }
@@ -121,7 +130,10 @@ export default class Player extends EventTarget {
             }
         }));
 
-        if (this.queue.count === 0 || this.#queueFinished) {
+        if (
+            generateIfEmpty &&
+            (this.queue.count === 0 || this.#queueFinished)
+        ) {
             await this.#playQueueEndFactory();
         }
     }
@@ -323,7 +335,7 @@ export default class Player extends EventTarget {
      */
     async restartOrPrevious() {
 
-        if (this.audio.currentTime > 3) {
+        if (this.audio.currentTime > PREVIOUS_RESTART_THRESHOLD_SECONDS) {
 
             this.audio.currentTime = 0;
 

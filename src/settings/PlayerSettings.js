@@ -16,6 +16,8 @@ export default class PlayerSettings {
         shuffle: false,
         // Modo repetición.
         repeat: false,
+        // Lista que se genera al terminar la cola.
+        queueEndMode: null,
         // Fecha del último escaneo de la biblioteca.
         lastLibraryScan: null,
         // Visualizacion seleccionada
@@ -64,7 +66,17 @@ export default class PlayerSettings {
             );
 
             if (json) {
-                this.#settings = JSON.parse(json);
+                this.#settings = {
+                    ...structuredClone(PlayerSettings.DEFAULT_SETTINGS),
+                    ...JSON.parse(json)
+                };
+                if (
+                    ![null, "artist", "album", "tracks50"].includes(
+                        this.#settings.queueEndMode
+                    )
+                ) {
+                    this.#settings.queueEndMode = null;
+                }
             }
 
         }
@@ -162,6 +174,19 @@ export default class PlayerSettings {
 
     set repeat(value) {
         this.#settings.repeat = Boolean(value);
+        this.save();
+    }
+
+    get queueEndMode() {
+        return this.#settings.queueEndMode;
+    }
+
+    set queueEndMode(value) {
+        if (![null, "artist", "album", "tracks50"].includes(value)) {
+            throw new RangeError(`Modo de generación no válido: ${value}`);
+        }
+
+        this.#settings.queueEndMode = value;
         this.save();
     }
 
