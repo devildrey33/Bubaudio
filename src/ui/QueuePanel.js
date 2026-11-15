@@ -58,14 +58,15 @@ export default class QueuePanel {
         return [
             {
                 label: "Grupo aleatorio",
-                icon: "🎤",
+                icon: "👥",
                 disabled: this.#library.artistCount === 0,
                 children: [
                     ...this.#artistSuggestions.map(artist => ({
                         label: artist.name,
-                        icon: "🎤",
+                        icon: "👥",
                         action: () => this.#replaceWithRandomList(
-                            `grupo '${artist.name}'`,
+                            "artist",
+                            `Grupo: ${artist.name}`,
                             () => this.#library.getArtistTracks(artist.id)
                         )
                     })),
@@ -77,7 +78,8 @@ export default class QueuePanel {
                     }
                 ],
                 action: () => this.#replaceWithRandomList(
-                    "grupo aleatorio",
+                    "artist",
+                    "Grupo aleatorio",
                     () => this.#getRandomArtistTracks()
                 )
             },
@@ -92,7 +94,8 @@ export default class QueuePanel {
                             : album.title,
                         icon: "💿",
                         action: () => this.#replaceWithRandomList(
-                            `disco '${album.title}'`,
+                            "album",
+                            `Disco: ${album.title}`,
                             () => this.#library.getAlbumTracks(album.id)
                         )
                     })),
@@ -104,7 +107,8 @@ export default class QueuePanel {
                     }
                 ],
                 action: () => this.#replaceWithRandomList(
-                    "disco aleatorio",
+                    "album",
+                    "Disco aleatorio",
                     () => this.#getRandomAlbumTracks()
                 )
             },
@@ -113,6 +117,7 @@ export default class QueuePanel {
                 icon: "🎵",
                 disabled: this.#library.trackCount === 0,
                 action: () => this.#replaceWithRandomList(
+                    "tracks50",
                     "50 canciones aleatorias",
                     () => this.#getRandomTracks()
                 )
@@ -187,25 +192,29 @@ export default class QueuePanel {
         return tracks.slice(0, 50);
     }
 
-    async #replaceWithRandomList(description, factory) {
+    async #replaceWithRandomList(mode, label, factory) {
         try {
             const tracks = await factory();
 
             if (!tracks.length) {
                 throw new Error(
-                    `No hay canciones para generar: ${description}.`
+                    `No hay canciones para generar: ${label}.`
                 );
             }
 
             await this.#player.playQueue(tracks);
+            this.#player.dispatchEvent(new CustomEvent(
+                "randomlistgenerated",
+                { detail: { mode, label } }
+            ));
         }
         catch (error) {
             console.error(
-                `QueuePanel: no se pudo generar la lista de ${description}`,
+                `QueuePanel: no se pudo generar la lista de ${label}`,
                 error
             );
             window.alert(
-                `No se pudo generar la lista de ${description}: ${String(error)}`
+                `No se pudo generar la lista de ${label}: ${String(error)}`
             );
         }
     }

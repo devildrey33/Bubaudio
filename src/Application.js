@@ -10,12 +10,30 @@ import QueuePanel           from "./ui/QueuePanel.js";
 import LibraryPanel         from "./ui/LibraryPanel.js";
 import AudioDebugPanel      from "./ui/AudioDebugPanel.js";
 import NowPlayingTooltip    from "./ui/NowPlayingTooltip.js";
+import RandomListTooltip    from "./ui/RandomListTooltip.js";
+import LibraryScanProgressPanel from "./ui/LibraryScanProgressPanel.js";
+import MusicPathsSetupPanel from "./ui/MusicPathsSetupPanel.js";
 
 import PlayerSettings       from "./settings/PlayerSettings.js";
 
 import LibraryIndexer       from "./libraryindexer/LibraryIndexer.js";
 
 import Player               from "./playlist/Player.js";
+
+
+function sameMusicPaths(first, second) {
+    const normalize = path => String(path)
+        .replace(/[\\/]/g, "\\")
+        .replace(/\\+$/, "")
+        .toLowerCase();
+    const normalizedFirst = first.map(normalize);
+    const normalizedSecond = second.map(normalize);
+
+    return normalizedFirst.length === normalizedSecond.length &&
+        normalizedFirst.every((path, index) =>
+            path === normalizedSecond[index]
+        );
+}
 
 
 export default class Application {
@@ -35,6 +53,10 @@ export default class Application {
         this.panelControls  = null;
         this.debugPanel     = null;
         this.renderer       = null;
+        this.nowPlayingTooltip = null;
+        this.randomListTooltip = null;
+        this.libraryScanProgressPanel = null;
+        this.musicPathsSetupPanel = null;
     }
 
 
@@ -47,9 +69,12 @@ export default class Application {
         this.settings = new PlayerSettings();
 
         this.settings.load();
+//        this.settings.reset();
 
-        if (this.settings.musicPath === "") {
-            await this.settings.selectFolder();
+        if (this.settings.musicPaths.length === 0) {
+            this.musicPathsSetupPanel =
+                new MusicPathsSetupPanel(this.settings);
+            await this.musicPathsSetupPanel.waitForSetup();
         }
 
 
@@ -58,25 +83,33 @@ export default class Application {
         //======================================================================
 
         this.library = new LibraryIndexer();
+        this.libraryScanProgressPanel =
+            new LibraryScanProgressPanel(this.library);
 
+        let libraryIsCurrent = false;
         try {
-
             await this.library.load();
 
-            console.log(
-                `Biblioteca cargada (${this.library.artistCount} artistas, ${this.library.albumCount} álbumes, ${this.library.trackCount} canciones)`
+            libraryIsCurrent = sameMusicPaths(
+                this.library.musicPaths,
+                this.settings.musicPaths
             );
         }
-        catch {
+        catch (error) {
+            console.warn("No se pudo cargar el índice de música", error);
+        }
 
+        if (!libraryIsCurrent) {
             console.log("Escaneando biblioteca...");
-
-            await this.library.scan(this.settings.musicPath);
-
-            await this.library.save();
+            await this.library.scan(this.settings.musicPaths);
 
             console.log(
                 `Biblioteca escaneada (${this.library.artistCount} artistas, ${this.library.albumCount} álbumes, ${this.library.trackCount} canciones)`
+            );
+        }
+        else {
+            console.log(
+                `Biblioteca cargada (${this.library.artistCount} artistas, ${this.library.albumCount} álbumes, ${this.library.trackCount} canciones)`
             );
         }
 
@@ -125,7 +158,8 @@ export default class Application {
 //            this.player.queue,
             this.settings,
             this.renderer,
-            this.library
+            this.library,
+            async () => this.panelLibrary?.render()
         );
 
         this.panelQueue = new QueuePanel(this.player, this.library);
@@ -155,7 +189,8 @@ export default class Application {
             this.panelQueue
         );
 
-        this.nowPlayingTooltip= new NowPlayingTooltip();
+        this.nowPlayingTooltip = new NowPlayingTooltip();
+        this.randomListTooltip = new RandomListTooltip();
 
 
         //======================================================================
@@ -174,6 +209,10 @@ export default class Application {
             );
 
         });        
+
+        this.player.addEventListener("randomlistgenerated", (event) => {
+            this.randomListTooltip.show(event.detail.label);
+        });
 
         console.log("Application inicializada");
     }

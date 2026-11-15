@@ -1,6 +1,33 @@
 import FolderSelector from "./FolderSelector.js";
 
 
+function normalizeMusicPath(value) {
+    if (typeof value !== "string" || !value.trim()) {
+        return null;
+    }
+
+    let path = value.trim().replace(/\//g, "\\");
+    const isUncPath = path.startsWith("\\\\");
+    const pathBody = isUncPath ? path.slice(2) : path;
+    path = (isUncPath ? "\\\\" : "") + pathBody.replace(/\\+/g, "\\");
+    path = path.replace(/\\+$/, "");
+
+    if (/^[a-zA-Z]:$/.test(path)) {
+        path += "\\";
+    }
+
+    return path || null;
+}
+
+function isSameOrNestedPath(parentPath, candidatePath) {
+    const parent = parentPath.toLowerCase();
+    const candidate = candidatePath.toLowerCase();
+    const prefix = parent.endsWith("\\") ? parent : `${parent}\\`;
+
+    return candidate === parent || candidate.startsWith(prefix);
+}
+
+
 export default class PlayerSettings {
 
     // Clave utilizada en localStorage.
@@ -8,8 +35,8 @@ export default class PlayerSettings {
 
     // Configuración por defecto.
     static DEFAULT_SETTINGS = {
-        // Ruta raíz de la biblioteca musical.
-        musicPath: "",
+        // Directorios raíz de la biblioteca musical.
+        musicPaths: [],
         // Volumen inicial.
         volume: 1.0,
         // Modo aleatorio.
@@ -45,10 +72,79 @@ export default class PlayerSettings {
             return null;
         }
 
-        this.#settings.musicPath = path;
+        const result = this.addMusicPath(path);
+        console.log("Directorio de música seleccionado:", path);
+        return {
+            path,
+            ...result
+        };
+    }
+
+    addMusicPath(path) {
+        const normalizedPath = normalizeMusicPath(path);
+
+        if (!normalizedPath) {
+            throw new TypeError("La ruta de música no es válida");
+        }
+
+        const currentPaths = this.musicPaths;
+        const musicPaths = PlayerSettings.normalizeMusicPaths([
+            ...currentPaths,
+            normalizedPath
+        ]);
+        const changed = musicPaths.length !== currentPaths.length ||
+            musicPaths.some((value, index) => value !== currentPaths[index]);
+
+        if (changed) {
+            this.#settings.musicPaths = musicPaths;
+            this.save();
+        }
+
+        return {
+            changed,
+            musicPaths: [...musicPaths]
+        };
+    }
+
+    removeMusicPath(path) {
+        const normalizedPath = normalizeMusicPath(path);
+        if (!normalizedPath) {
+            return false;
+        }
+
+        const currentPaths = this.musicPaths;
+        const musicPaths = currentPaths.filter(value =>
+            value.toLowerCase() !== normalizedPath.toLowerCase()
+        );
+
+        if (musicPaths.length === currentPaths.length) {
+            return false;
+        }
+
+        this.#settings.musicPaths = musicPaths;
         this.save();
-        console.log("Biblioteca:", path);
-        return path;
+        return true;
+    }
+
+    static normalizeMusicPaths(paths) {
+        const roots = [];
+        const candidates = Array.isArray(paths) ? paths : [paths];
+
+        for (const candidate of candidates) {
+            const path = normalizeMusicPath(candidate);
+            if (!path || roots.some(root =>
+                isSameOrNestedPath(root, path)
+            )) {
+                continue;
+            }
+
+            const retainedRoots = roots.filter(root =>
+                !isSameOrNestedPath(path, root)
+            );
+            roots.splice(0, roots.length, ...retainedRoots, path);
+        }
+
+        return roots;
     }
 
     /**
@@ -66,16 +162,33 @@ export default class PlayerSettings {
             );
 
             if (json) {
+                const storedSettings = JSON.parse(json);
+                const musicPaths = Array.isArray(storedSettings.musicPaths)
+                    ? storedSettings.musicPaths
+                    : [storedSettings.musicPath];
+
                 this.#settings = {
                     ...structuredClone(PlayerSettings.DEFAULT_SETTINGS),
-                    ...JSON.parse(json)
+                    ...storedSettings,
+                    musicPaths: PlayerSettings.normalizeMusicPaths(musicPaths)
                 };
+                delete this.#settings.musicPath;
+
                 if (
                     ![null, "artist", "album", "tracks50"].includes(
                         this.#settings.queueEndMode
                     )
                 ) {
                     this.#settings.queueEndMode = null;
+                }
+
+                if (
+                    !Array.isArray(storedSettings.musicPaths) ||
+                    storedSettings.musicPath ||
+                    JSON.stringify(storedSettings.musicPaths) !==
+                        JSON.stringify(this.#settings.musicPaths)
+                ) {
+                    this.save();
                 }
             }
 
@@ -125,16 +238,22 @@ export default class PlayerSettings {
     }
 
 
-    /**
-     * Ruta raíz de la colección musical.
-     */
+    get musicPaths() {
+        return [...this.#settings.musicPaths];
+    }
+
+    set musicPaths(value) {
+        this.#settings.musicPaths =
+            PlayerSettings.normalizeMusicPaths(value);
+        this.save();
+    }
+
     get musicPath() {
-        return this.#settings.musicPath;
+        return this.#settings.musicPaths[0] ?? "";
     }
 
     set musicPath(value) {
-        this.#settings.musicPath = value;
-        this.save();
+        this.musicPaths = value ? [value] : [];
     }
 
 

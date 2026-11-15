@@ -46,7 +46,6 @@ export default class NowPlayingTooltip {
         }, 5000);
     }
 
-
     hide() {
         this.#element.classList.remove(
             "visible"

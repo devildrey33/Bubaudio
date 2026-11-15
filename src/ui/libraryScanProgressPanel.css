@@ -1,0 +1,114 @@
+#library-scan-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    padding: 24px;
+    background: rgba(5, 8, 12, 0.68);
+    backdrop-filter: blur(5px);
+}
+
+#library-scan-overlay[hidden] {
+    display: none;
+}
+
+.library-scan-panel {
+    width: min(440px, 100%);
+    box-sizing: border-box;
+    padding: 24px;
+    border: 1px solid rgba(151, 170, 194, 0.22);
+    border-radius: 16px;
+    background: rgba(20, 24, 31, 0.98);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+    color: #e5eaf1;
+    font-family: "Segoe UI", sans-serif;
+}
+
+.library-scan-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.library-scan-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: rgba(77, 163, 255, 0.14);
+    color: #79b8ff;
+    font-size: 24px;
+}
+
+#library-scan-title {
+    margin: 0 0 4px;
+    color: #f3f6fa;
+    font-size: 18px;
+    font-weight: 650;
+}
+
+#library-scan-status {
+    margin: 0;
+    color: #9aa8b8;
+    font-size: 13px;
+}
+
+.library-scan-progress {
+    position: relative;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(151, 170, 194, 0.16);
+}
+
+.library-scan-progress > div {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 34%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #4da3ff, #92c9ff);
+    animation: library-scan-progress 1.4s ease-in-out infinite;
+}
+
+.library-scan-details {
+    display: grid;
+    gap: 6px;
+    margin-top: 18px;
+    color: #c3ceda;
+    font-size: 13px;
+}
+
+.library-scan-details span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#library-scan-counts {
+    margin: 16px 0 0;
+    color: #79b8ff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+@keyframes library-scan-progress {
+    from {
+        transform: translateX(-120%);
+    }
+
+    to {
+        transform: translateX(320%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .library-scan-progress > div {
+        animation: none;
+        left: 33%;
+    }
+}

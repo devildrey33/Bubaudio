@@ -15,6 +15,9 @@
     <link rel="stylesheet" href="./src/ui/contextMenu.css">
     <link rel="stylesheet" href="./src/ui/audioDebugPanel.css">
     <link rel="stylesheet" href="./src/ui/nowPlayingTooltip.css">
+    <link rel="stylesheet" href="./src/ui/randomListTooltip.css">
+    <link rel="stylesheet" href="./src/ui/libraryScanProgressPanel.css">
+    <link rel="stylesheet" href="./src/ui/musicPathsSetupPanel.css">
 </head>
 
 <body>
@@ -22,9 +25,15 @@
     <!-- Zona superior para mostrar el selector de shaders -->
     <div id="shader-trigger">
         <div id="shaderPanel">
-            <button id="btn-shader-prev">◀</button>
-            <select id="shader-select"></select>
-            <button id="btn-shader-next">▶</button>
+            <div class="shader-panel-header">
+                <span class="shader-panel-icon" aria-hidden="true">✦</span>
+                <span>Visualizador</span>
+            </div>
+            <div class="shader-selector-row">
+                <button id="btn-shader-prev" title="Shader anterior">◀</button>
+                <select id="shader-select"></select>
+                <button id="btn-shader-next" title="Siguiente shader">▶</button>
+            </div>
         </div>
     </div>
 
@@ -38,6 +47,60 @@
 
         <div id="now-playing-album"></div>
 
+    </div>
+
+    <div id="random-list-tooltip" aria-live="polite">
+        <div class="random-list-tooltip-title">Lista aleatoria generada</div>
+        <div id="random-list-tooltip-label"></div>
+    </div>
+
+    <div id="library-scan-overlay" hidden>
+        <section class="library-scan-panel"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="library-scan-title">
+            <div class="library-scan-heading">
+                <span class="library-scan-icon" aria-hidden="true">♫</span>
+                <div>
+                    <h2 id="library-scan-title">Escaneando biblioteca</h2>
+                    <p id="library-scan-status">Preparando el escaneo...</p>
+                </div>
+            </div>
+            <div class="library-scan-progress" role="progressbar"
+                 aria-label="Progreso del escaneo de música">
+                <div></div>
+            </div>
+            <div class="library-scan-details">
+                <span id="library-scan-artist">Grupo: —</span>
+                <span id="library-scan-folder">Carpeta: —</span>
+            </div>
+            <p id="library-scan-counts">0 grupos · 0 discos · 0 canciones</p>
+        </section>
+    </div>
+
+    <div id="music-path-setup-overlay" hidden>
+        <section class="music-path-setup-panel"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="music-path-setup-title">
+            <div class="music-path-setup-heading">
+                <span class="music-path-setup-icon" aria-hidden="true">♫</span>
+                <div>
+                    <h2 id="music-path-setup-title">Configura tu biblioteca</h2>
+                    <p>Añade uno o más directorios raíz de música para empezar.</p>
+                </div>
+            </div>
+            <div id="music-path-list" class="music-path-list"></div>
+            <p id="music-path-setup-status" role="status"></p>
+            <div class="music-path-setup-actions">
+                <button id="music-path-add" type="button">
+                    Seleccionar directorio
+                </button>
+                <button id="music-path-continue" type="button" disabled>
+                    Continuar
+                </button>
+            </div>
+        </section>
     </div>
 
     <!-- PANEL IZQUIERDO -->
@@ -154,7 +217,8 @@
             </button>
             <button id="btn-select-folder"
                     class="player-button"
-                    title="Seleccionar biblioteca">
+                    title="Añadir directorio de música"
+                    aria-label="Añadir directorio de música">
                 📁
             </button>
 

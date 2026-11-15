@@ -33,6 +33,7 @@ export default class PlayerControls {
 
     #library;
     #repeatMenu;
+    #onMusicPathsChanged;
 
     //--------------------------------------------------------------------------
     // CONTROLES DE PROGRESO
@@ -61,12 +62,19 @@ export default class PlayerControls {
      * @param {Visualizer} renderer
      * @param {LibraryIndexer} library
      */
-    constructor(player, settings, renderer, library) {
+    constructor(
+        player,
+        settings,
+        renderer,
+        library,
+        onMusicPathsChanged = null
+    ) {
 
         this.#player = player;
         this.#settings = settings;
         this.#renderer = renderer;
         this.#library = library;
+        this.#onMusicPathsChanged = onMusicPathsChanged;
 
         this.#cacheDom();
         this.#repeatMenu = new ContextMenu();
@@ -141,7 +149,10 @@ export default class PlayerControls {
         this.#progressBar.addEventListener("input", () => this.#onSeek());
         this.#volumeBar.addEventListener("input", () => this.#onVolume());
 
-        this.#btnFolder.addEventListener("click", async () => this.#settings.selectFolder());
+        this.#btnFolder.addEventListener(
+            "click",
+            () => this.#onSelectMusicPath()
+        );
 
         this.#btnShaderPrev.addEventListener("click", () => this.#onPreviousShader());
         this.#btnShaderNext.addEventListener("click", () => this.#onNextShader());
@@ -162,6 +173,29 @@ export default class PlayerControls {
         }
 
         this.#updatePlayButton();
+    }
+
+    async #onSelectMusicPath() {
+        try {
+            const selection = await this.#settings.selectFolder();
+            if (!selection) {
+                return;
+            }
+
+            await this.#library.scan(this.#settings.musicPaths);
+            if (this.#onMusicPathsChanged) {
+                await this.#onMusicPathsChanged();
+            }
+        }
+        catch (error) {
+            console.error(
+                "No se pudo actualizar la biblioteca de música",
+                error
+            );
+            window.alert(
+                `No se pudo actualizar la biblioteca de música: ${String(error)}`
+            );
+        }
     }
 
 
@@ -255,7 +289,7 @@ export default class PlayerControls {
                 children: [
                     {
                         label: "Grupo aleatorio",
-                        icon: queueEndMode === "artist" ? "✓" : "🎤",
+                        icon: queueEndMode === "artist" ? "✓" : "👥",
                         disabled: this.#library.artistCount === 0,
                         action: () => this.#generateAfterQueue(
                             "artist",

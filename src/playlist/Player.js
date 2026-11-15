@@ -176,6 +176,18 @@ export default class Player extends EventTarget {
         this.queue.setTracks(tracks);
         this.dispatchEvent(new Event("queuechanged"));
         await this.playCurrent();
+
+        const labels = {
+            artist: "Grupo aleatorio",
+            album: "Disco aleatorio",
+            tracks50: "50 canciones aleatorias"
+        };
+        this.dispatchEvent(new CustomEvent("randomlistgenerated", {
+            detail: {
+                mode,
+                label: labels[mode]
+            }
+        }));
     }
 
     #clearQueueEndMode(mode, factory) {

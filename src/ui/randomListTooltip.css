@@ -1,0 +1,43 @@
+#random-list-tooltip {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 9999;
+    width: min(320px, calc(50vw - 30px));
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid rgba(151, 170, 194, 0.2);
+    border-radius: 12px;
+    background: rgba(17, 20, 26, 0.94);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+    color: #e5eaf1;
+    font-family: "Segoe UI", sans-serif;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 250ms ease, transform 250ms ease;
+}
+
+#random-list-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.random-list-tooltip-title {
+    margin-bottom: 4px;
+    color: #9aa8b8;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+#random-list-tooltip-label {
+    overflow: hidden;
+    color: #79b8ff;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

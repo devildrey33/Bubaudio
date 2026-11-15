@@ -5,7 +5,8 @@
     left: 20px;
     bottom: 20px;
 
-    width: 320px;
+    width: min(320px, calc(50vw - 30px));
+    box-sizing: border-box;
 
     padding: 12px;
 

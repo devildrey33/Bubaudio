@@ -74,31 +74,98 @@ export default class LibraryPanel {
 
         const artistLabel = document.createElement("summary");
         artistLabel.className = "library-row";
-        this.#appendRowContent(artistLabel, "🎤", artist.name);
+        this.#appendRowContent(artistLabel, "👥", artist.name);
         artistNode.appendChild(artistLabel);
 
-        const albums = this.#library
-            .getArtistAlbums(artist.id)
-            .sort((a, b) => a.title.localeCompare(b.title, "es", {
-                numeric: true,
-                sensitivity: "base"
-            }));
-
+        const albumTree = this.#createAlbumTree(artist);
         const albumList = document.createElement("div");
         albumList.className = "library-children";
-
-        for (const album of albums) {
-            albumList.appendChild(
-                this.#createAlbumNode(album)
-            );
-        }
+        this.#appendDirectoryChildren(albumList, albumTree);
 
         artistNode.appendChild(albumList);
         return artistNode;
     }
 
+    #createAlbumTree(artist) {
+        const root = {
+            path: artist.path,
+            children: new Map()
+        };
 
-    #createAlbumNode(album) {
+        for (const album of this.#library.getArtistAlbums(artist.id)) {
+            const path = String(album.path ?? "")
+                .replace(/[\\/]/g, "\\");
+            const artistPath = String(artist.path ?? "")
+                .replace(/[\\/]/g, "\\")
+                .replace(/\\+$/, "");
+            const prefix = `${artistPath}\\`;
+            const relativePath = path.toLowerCase().startsWith(
+                prefix.toLowerCase()
+            )
+                ? path.slice(prefix.length)
+                : album.title;
+            const pathParts = relativePath.split("\\").filter(Boolean);
+
+            let directory = root;
+            for (const name of pathParts) {
+                if (!directory.children.has(name)) {
+                    directory.children.set(name, {
+                        name,
+                        path: `${directory.path}\\${name}`,
+                        album: null,
+                        children: new Map()
+                    });
+                }
+
+                directory = directory.children.get(name);
+            }
+
+            directory.album = album;
+        }
+
+        return root;
+    }
+
+
+    #appendDirectoryChildren(container, directory) {
+        const children = [...directory.children.values()].sort((a, b) =>
+            a.name.localeCompare(b.name, "es", {
+                numeric: true,
+                sensitivity: "base"
+            })
+        );
+
+        for (const child of children) {
+            container.appendChild(
+                child.album
+                    ? this.#createAlbumNode(child.album, child)
+                    : this.#createFolderNode(child)
+            );
+        }
+    }
+
+
+    #createFolderNode(directory) {
+        const folderNode = document.createElement("details");
+        folderNode.className = "library-node library-folder";
+        folderNode.dataset.libraryType = "directory";
+        folderNode.dataset.libraryId = directory.path;
+
+        const folderLabel = document.createElement("summary");
+        folderLabel.className = "library-row";
+        this.#appendRowContent(folderLabel, "📁", directory.name);
+        folderNode.appendChild(folderLabel);
+
+        const children = document.createElement("div");
+        children.className = "library-children";
+        this.#appendDirectoryChildren(children, directory);
+        folderNode.appendChild(children);
+
+        return folderNode;
+    }
+
+
+    #createAlbumNode(album, directory) {
 
         const albumNode = document.createElement("details");
         albumNode.className = "library-node library-album";
@@ -127,6 +194,10 @@ export default class LibraryPanel {
             trackRow.dataset.libraryId = track.id;
             this.#appendRowContent(trackRow, "🎵", track.title);
             trackList.appendChild(trackRow);
+        }
+
+        if (directory) {
+            this.#appendDirectoryChildren(trackList, directory);
         }
 
         albumNode.appendChild(trackList);
@@ -159,13 +230,17 @@ export default class LibraryPanel {
 
         const type = node.dataset.libraryType;
         const id = node.dataset.libraryId;
-        const libraryItem = this.#findLibraryItem(type, id);
+        const libraryItem = type === "directory"
+            ? { path: id }
+            : this.#findLibraryItem(type, id);
 
         if (!libraryItem) {
             return [];
         }
 
-        const tracks = this.#getNodeTracks(type, libraryItem);
+        const tracks = type === "directory"
+            ? this.#getDirectoryTracks(id)
+            : this.#getNodeTracks(type, libraryItem);
 
         return [
             {
@@ -186,6 +261,25 @@ export default class LibraryPanel {
                 action: () => this.#showFolder(libraryItem.path)
             }
         ];
+    }
+
+    #getDirectoryTracks(path) {
+        const directoryPath = String(path)
+            .replace(/[\\/]/g, "\\")
+            .replace(/\\+$/, "")
+            .toLowerCase();
+        const prefix = `${directoryPath}\\`;
+
+        return this.#library.tracks
+            .filter(track => String(track.path)
+                .replace(/[\\/]/g, "\\")
+                .toLowerCase()
+                .startsWith(prefix)
+            )
+            .sort((a, b) => a.path.localeCompare(b.path, "es", {
+                numeric: true,
+                sensitivity: "base"
+            }));
     }
 
 

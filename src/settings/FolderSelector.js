@@ -12,7 +12,7 @@ export default class FolderSelector {
         const path = await open({
             directory: true,
             multiple: false,
-            title: "Seleccionar biblioteca musical"
+            title: "Añadir directorio raíz de música"
         });
 
         if (!path) {
