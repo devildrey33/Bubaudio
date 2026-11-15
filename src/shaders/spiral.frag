@@ -68,17 +68,20 @@ col += coreCol * coreGlow * (0.5 + 2.2 * uBass + 0.8 * beat);
 col += vec3(1.0) * exp(-r * 22.0) * (0.4 + 1.2 * uBass);   // hot centre
 
 // ------------------------------------------------ 3. spectrum bars
-const float BARS     = 128.0;
-const float SPEC_POW = 0.7;            // <1 gives high freqs more arc space
+const float HALF_BARS = 64.0;
+const float SPEC_POW  = 0.7;           // <1 gives high freqs more arc space
 
-float cell   = floor(a01 * BARS);
-float fc     = (cell + 0.5) / BARS;
-float fx     = pow(fc, SPEC_POW);      // perceptual remap of the spectrum
-float spec   = texture2D(uSpectrum, vec2(fx, 0.5)).r;
-spec = clamp(spec * (0.9 + 0.1 * sin(t * 4.0 + cell * 0.7)), 0.0, 1.0);
+float secondHalf = step(0.5, a01);
+float halfAngle  = fract(a01 * 2.0);
+float cell       = min(floor(halfAngle * HALF_BARS), HALF_BARS - 1.0);
+float spectrumCell = mix(cell, HALF_BARS - 1.0 - cell, secondHalf);
+float fc         = (spectrumCell + 0.5) / HALF_BARS;
+float fx         = pow(fc, SPEC_POW);  // perceptual remap of the spectrum
+float spec       = texture2D(uSpectrum, vec2(fx, 0.5)).r;
+spec = clamp(spec * (0.9 + 0.1 * sin(t * 4.0 + spectrumCell * 0.7)), 0.0, 1.0);
 
-// angular gap between bars (tapered ends)
-float dAng    = abs(fract(a01 * BARS) - 0.5) * 2.0;   // 0 = centre, 1 = border
+// Angular gap between bars (tapered ends)
+float dAng    = abs(fract(halfAngle * HALF_BARS) - 0.5) * 2.0;
 float gapMask = 1.0 - smoothstep(0.60, 1.0, dAng);
 
 float baseR  = 0.40 + 0.05 * uBass + 0.02 * beat;
@@ -93,7 +96,8 @@ vec3 barCol = palette(fc * 1.2 + 0.10 + t * 0.05 + uTreble * 0.30);
 col += barCol * barMask * (0.5 + 1.8 * spec) * (0.8 + 0.5 * uTreble);
 
 // ------------------------------------------------ 4. waveform ring
-float wave  = texture2D(uWaveform, vec2(a01, 0.5)).r * 2.0 - 1.0;
+float waveU = mix(halfAngle, 1.0 - halfAngle, secondHalf);
+float wave  = texture2D(uWaveform, vec2(waveU, 0.5)).r * 2.0 - 1.0;
 float waveR = baseR - 0.07 + wave * (0.05 + 0.08 * uBass);
 float wLine = 1.0 - smoothstep(0.0, 0.008 + pixel * 1.5, abs(r - waveR));
 col += mix(vec3(1.0), palette(0.5 + uMid), 0.35)

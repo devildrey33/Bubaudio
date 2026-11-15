@@ -1,0 +1,95 @@
+.context-menu,
+.context-submenu {
+    box-sizing: border-box;
+    min-width: 190px;
+    max-width: min(320px, calc(100vw - 16px));
+    padding: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(28, 28, 28, 0.96);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px);
+    color: #eee;
+}
+
+.context-menu {
+    position: fixed;
+    z-index: 3000;
+}
+
+.context-menu[hidden] {
+    display: none;
+}
+
+.context-menu-entry {
+    position: relative;
+}
+
+.context-menu-button {
+    width: 100%;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.context-menu-button:hover,
+.context-menu-button:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.context-menu-button:disabled {
+    color: #777;
+    cursor: default;
+}
+
+.context-menu-icon {
+    width: 20px;
+    flex: 0 0 20px;
+    text-align: center;
+}
+
+.context-menu-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-menu-arrow {
+    margin-left: 12px;
+    color: #999;
+}
+
+.context-submenu {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: calc(100% + 4px);
+    display: none;
+}
+
+.context-menu-entry:hover > .context-submenu,
+.context-menu-entry:focus-within > .context-submenu,
+.context-menu-entry.open > .context-submenu {
+    display: block;
+}
+
+.context-menu-entry.opens-left > .context-submenu {
+    right: calc(100% + 4px);
+    left: auto;
+}
+
+.context-menu-entry.opens-up > .context-submenu {
+    top: auto;
+    bottom: 0;
+}

@@ -391,7 +391,7 @@ body {
     width: 10%;
     height: 100vh;
 
-    z-index: 100;
+    z-index: 1100;
 }
 
 
@@ -416,7 +416,8 @@ body {
 }
 
 #library-trigger:hover #library-panel,
-#library-panel:hover {
+#library-panel:hover,
+#library-panel.context-menu-open {
 
     left: 0;
 }

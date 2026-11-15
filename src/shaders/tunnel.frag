@@ -1,3 +1,5 @@
+precision highp float;
+
 varying vec2 vUv;
 
 uniform float uTime;
@@ -8,227 +10,123 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;
+uniform float uMidBeat;
+uniform float uTrebleBeat;
 
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
-#define PI 3.14159265359
 #define TAU 6.28318530718
 
-// Ruta cerrada con curvas, espirales y un looping amplio.
-// El parámetro s recorre una vuelta completa cada 120 unidades.
-vec3 path(float s) {
-    float q = TAU * s / 120.0;
-
-    return vec3(
-        13.0 * sin(q) + 2.4 * sin(3.0 * q),
-         7.0 * sin(2.0 * q + 0.4) + 1.5 * cos(3.0 * q),
-        18.0 * (1.0 - cos(q)) + 2.0 * sin(2.0 * q)
-    );
+float hash21(vec2 point)
+{
+    point = fract(point * vec2(123.34, 456.21));
+    point += dot(point, point + 45.32);
+    return fract(point.x * point.y);
 }
 
-float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+vec3 audioRibbon(
+    vec2 point,
+    float angle,
+    float colorOffset,
+    float strength,
+    float widthScale
+)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+    vec2 localPoint = mat2(c, -s, s, c) * point;
+    float wavePosition = fract(localPoint.x * 0.075 + 0.5 + uTime * 0.008);
+    float wave = texture2D(uWaveform, vec2(wavePosition, 0.5)).r * 2.0 - 1.0;
+    float frequency = texture2D(
+        uSpectrum,
+        vec2(fract(abs(localPoint.x) * 0.18), 0.5)
+    ).r;
+    float centerLine = wave * (0.075 + uBass * 0.23)
+                     + 0.018 * sin(localPoint.x * 2.4 + uTime * 0.25);
+    float width = (0.028 + frequency * (0.13 + uMid * 0.05)) * widthScale;
+    float distanceToLine = abs(localPoint.y - centerLine);
+    float core = 1.0 - smoothstep(width * 0.38, width, distanceToLine);
+    float glow = exp(-distanceToLine / max(width * 2.8, 0.012));
+    vec3 hue;
+    if (colorOffset < 0.5)
+    {
+        hue = mix(vec3(0.30, 0.82, 0.20), vec3(0.62, 0.68, 0.86),
+                  smoothstep(-1.4, 1.4, localPoint.x));
+    }
+    else if (colorOffset < 0.7)
+    {
+        hue = mix(vec3(0.70, 0.70, 0.84), vec3(0.24, 0.78, 0.38),
+                  smoothstep(-1.2, 1.2, localPoint.x));
+    }
+    float energy = (core * (0.65 + frequency * 1.5)
+                  + glow * (0.12 + uVolume * 0.24)) * strength;
+    return hue * energy;
 }
 
-// SDF del interior del túnel y de la esfera.
-float sceneDistance(
-    vec3 worldPos,
-    vec3 camPos,
-    vec3 right,
-    vec3 up,
-    vec3 forward,
-    float progress,
-    vec3 spherePos,
-    out float tunnelDistance,
-    out float sphereDistance,
-    out vec2 radial
-) {
-    vec3 rel = worldPos - camPos;
-    vec3 localPos = vec3(
-        dot(rel, right),
-        dot(rel, up),
-        dot(rel, forward)
-    );
+void main()
+{
+    vec2 point = (vUv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0) * 2.0;
+    float radius = length(point);
+    float angle = atan(point.y, point.x);
+    float angle01 = fract(angle / TAU + 0.5 + uTime * 0.006);
+    float pixel = 1.0 / uResolution.y;
+    float beat = max(uBeat, max(uMidBeat, uTrebleBeat));
+    vec3 color = vec3(0.001, 0.002, 0.009);
 
-    vec3 centerWorld = path(progress + localPos.z) - camPos;
-    vec2 centerLocal = vec2(
-        dot(centerWorld, right),
-        dot(centerWorld, up)
-    );
+    vec2 starCell = floor(point * 34.0);
+    vec2 starOffset = fract(point * 34.0) - 0.5;
+    float starSeed = hash21(starCell);
+    float star = (1.0 - smoothstep(0.012, 0.055, length(starOffset)))
+               * step(0.986, starSeed);
+    float twinkle = 0.55 + 0.45 * sin(uTime * (1.0 + starSeed * 4.0) + starSeed * TAU);
+    color += vec3(0.44, 0.57, 0.92) * star * twinkle * (0.45 + uVolume * 0.8);
 
-    radial = localPos.xy - centerLocal;
+    float vignette = 1.0 - smoothstep(0.72, 1.75, radius);
+    color += audioRibbon(point, 0.0, 0.32, 1.15, 1.5);
+    color += audioRibbon(point, 1.5708, 0.64, 0.78, 0.42);
 
-    float angle = fract(atan(radial.y, radial.x) / TAU + 1.0);
-    float secondGraph = step(0.5, angle);
+    float spectrum = texture2D(
+        uSpectrum,
+        vec2(pow(angle01, 0.72), 0.5)
+    ).r;
+    float waveform = texture2D(uWaveform, vec2(angle01, 0.5)).r * 2.0 - 1.0;
+    float ringRadius = 0.66
+                     + waveform * (0.012 + uBass * 0.025)
+                     + (spectrum - 0.12) * (0.11 + uTreble * 0.06);
+    float ringDistance = abs(radius - ringRadius);
+    float ringLine = exp(-pow(ringDistance / (0.003 + pixel * 1.2), 2.0));
+    float ringGlow = exp(-ringDistance * 18.0);
+    color += vec3(0.12, 0.84, 0.30)
+           * (ringLine * (0.75 + spectrum * 1.2) + ringGlow * 0.14);
 
-    // Dos gráficos de barras reflejados e invertidos.
-    float bandIndex = mix(angle * 2.0, (1.0 - angle) * 2.0, secondGraph);
-    bandIndex = clamp(bandIndex, 0.0, 0.999);
+    float innerWaveRadius = 0.31 + waveform * (0.018 + uBass * 0.055);
+    float innerWave = exp(-pow((radius - innerWaveRadius) / (0.003 + pixel), 2.0));
+    color += vec3(0.16, 0.72, 0.32) * innerWave * (0.6 + uMid * 0.7);
 
-    // Cuantizar las bandas hace que se lean como barras.
-    float band = (floor(bandIndex * 64.0) + 0.5) / 64.0;
-    float amplitude = texture2D(uSpectrum, vec2(band, 0.5)).r;
-    amplitude = clamp(amplitude, 0.0, 1.0);
+    float spiralPhase = mod(angle + uTime * 0.12 + TAU, TAU) / TAU;
+    float spiralRadius = 0.17 + spiralPhase * 0.72;
+    float spiralDistance = abs(radius - spiralRadius);
+    float spiralLine = exp(-pow(spiralDistance / (0.006 + pixel * 1.4), 2.0));
+    float spiralGlow = exp(-spiralDistance * 18.0);
+    color += vec3(0.62, 0.78, 0.92) * (spiralLine * 0.85 + spiralGlow * 0.10);
 
-    float side = mix(1.0, -1.0, secondGraph);
-    float radius = 4.2 + side * (0.20 + amplitude * 1.10);
+    float coreRadius = 0.072 + uBass * 0.022 + beat * 0.025;
+    float core = 1.0 - smoothstep(coreRadius - pixel, coreRadius + pixel, radius);
+    float coreRim = exp(-pow((radius - coreRadius) / (0.008 + pixel), 2.0));
+    float sphereShade = 0.62 + 0.38 * clamp(1.0 - length(point) / max(coreRadius, 0.001), 0.0, 1.0);
+    color += vec3(0.18, 0.34, 0.92) * core * sphereShade;
+    color += vec3(0.60, 0.74, 1.0) * coreRim * (0.65 + uBeat);
+    color += vec3(1.0, 0.98, 1.0) * exp(-radius * 52.0) * (1.35 + uBass + beat * 0.8);
+    color += vec3(0.30, 0.32, 0.86) * exp(-max(radius - coreRadius, 0.0) * 10.0)
+           * (0.10 + uVolume * 0.16 + beat * 0.2);
 
-    tunnelDistance = radius - length(radial);
-    sphereDistance = length(worldPos - spherePos) - 0.82;
+    float beatRingRadius = 0.16 + (1.0 - beat) * 0.58;
+    float beatRing = exp(-pow((radius - beatRingRadius) / (0.012 + beat * 0.025), 2.0)) * beat;
+    color += vec3(0.22, 0.86, 0.40) * beatRing * 1.2;
 
-    return min(tunnelDistance, sphereDistance);
-}
-
-void main() {
-    // Una vuelta cada 600 segundos; uTime debe avanzar con la reproducción.
-    float progress = mod(max(uTime, 0.0), 600.0) * 0.20;
-
-    vec3 camPos = path(progress);
-    vec3 spherePos = path(progress + 4.0);
-
-    vec3 forward = normalize(path(progress + 0.15) - path(progress - 0.15));
-    vec3 worldUp = vec3(0.0, 1.0, 0.0);
-    vec3 right = normalize(cross(forward, worldUp));
-    vec3 up = normalize(cross(right, forward));
-
-    vec2 screen = vUv * 2.0 - 1.0;
-    screen.x *= uResolution.x / max(uResolution.y, 1.0);
-
-    vec3 rayDir = normalize(
-        right * screen.x +
-        up * screen.y +
-        forward * 1.45
-    );
-
-    vec3 color = vec3(0.004, 0.008, 0.022);
-    float travel = 0.0;
-    float hitTunnel = 0.0;
-    float hitSphere = 0.0;
-    vec3 hitPos = vec3(0.0);
-    vec2 hitRadial = vec2(0.0);
-
-    // Raymarch del túnel y la esfera.
-    for (int i = 0; i < 96; i++) {
-        vec3 p = camPos + rayDir * travel;
-        float dTunnel;
-        float dSphere;
-        vec2 radial;
-
-        float d = sceneDistance(
-            p, camPos, right, up, forward,
-            progress, spherePos,
-            dTunnel, dSphere, radial
-        );
-
-        if (d < 0.025) {
-            hitPos = p;
-            hitRadial = radial;
-            hitTunnel = dTunnel;
-            hitSphere = dSphere;
-            break;
-        }
-
-        travel += max(d * 0.72, 0.025);
-        if (travel > 95.0) break;
-    }
-
-    if (travel <= 95.0 && (hitTunnel < 0.025 || hitSphere < 0.025)) {
-        if (hitSphere < hitTunnel) {
-            vec3 normal = normalize(hitPos - spherePos);
-            vec3 lightDir = normalize(vec3(-0.35, 0.65, -0.7));
-            float diffuse = max(dot(normal, lightDir), 0.0);
-
-            color = vec3(0.15, 0.78, 1.0) * (1.4 + diffuse * 1.8);
-            color += vec3(0.12, 0.65, 1.0) * uBeat * 1.4;
-        } else {
-            vec3 rel = hitPos - camPos;
-            vec3 localPos = vec3(
-                dot(rel, right),
-                dot(rel, up),
-                dot(rel, forward)
-            );
-
-            float angle = fract(atan(hitRadial.y, hitRadial.x) / TAU + 1.0);
-            float secondGraph = step(0.5, angle);
-            float bandIndex = mix(angle * 2.0, (1.0 - angle) * 2.0, secondGraph);
-            bandIndex = clamp(bandIndex, 0.0, 0.999);
-
-            float band = (floor(bandIndex * 64.0) + 0.5) / 64.0;
-            float amplitude = texture2D(uSpectrum, vec2(band, 0.5)).r;
-
-            float bandEdge = fract(bandIndex * 64.0);
-            float barLine = 1.0 - smoothstep(0.02, 0.08, min(bandEdge, 1.0 - bandEdge));
-
-            vec3 normal = -normalize(vec3(hitRadial, 0.0));
-            vec3 lightDir = normalize(vec3(-0.3, 0.55, -0.7));
-            float diffuse = 0.25 + 0.75 * max(dot(normal, lightDir), 0.0);
-
-            vec3 base = vec3(0.025, 0.07, 0.16);
-            vec3 audioColor = vec3(0.02, 0.75, 1.0);
-            audioColor += vec3(0.45, 0.08, 0.9) * uTreble;
-
-            float barGlow = amplitude * (0.45 + 1.5 * uVolume) + barLine * 0.25;
-            color = (base + audioColor * barGlow) * diffuse;
-
-            // Pulsos que recorren el túnel al ritmo del audio.
-            float pulse = 0.5 + 0.5 * sin(localPos.z * 2.3 - uTime * 3.0);
-            color += vec3(0.02, 0.24, 0.38) * pulse * (uBass + uBeat);
-        }
-    }
-
-    // Halo aproximado de bloom alrededor de la esfera.
-    float closestT = max(dot(spherePos - camPos, rayDir), 0.0);
-    vec3 closestPoint = camPos + rayDir * closestT;
-    float orbDist = length(closestPoint - spherePos);
-    float orbGlow = exp(-orbDist * 0.72) * (0.35 + 1.2 * uVolume);
-    color += vec3(0.03, 0.30, 0.55) * orbGlow;
-
-    // Niebla para dar profundidad al túnel.
-    float fog = exp(-travel * 0.018);
-    color *= fog;
-
-    // Osciloscopio en la franja inferior.
-    float oscArea = 1.0 - smoothstep(0.18, 0.25, vUv.y);
-    float waveform = texture2D(uWaveform, vec2(vUv.x, 0.5)).r;
-
-    // Asume que la textura de waveform codifica amplitud de 0 a 1.
-    float wave = waveform * 2.0 - 1.0;
-    float waveY = 0.115 + wave * 0.075;
-    float lineDist = abs(vUv.y - waveY);
-
-    float oscCore = 1.0 - smoothstep(0.0025, 0.008, lineDist);
-    float oscGlow = exp(-lineDist * 70.0);
-
-    vec3 oscColor = vec3(0.02, 0.75, 1.0);
-    vec3 oscLayer = oscColor * (1.5 * oscCore + 0.85 * oscGlow);
-    oscLayer += vec3(0.04, 0.10, 0.24) * (1.0 - smoothstep(0.0, 0.25, vUv.y));
-
-    color = mix(color, color + oscLayer, oscArea);
-
-    // Partículas que aparecen cuando hay picos altos.
-    float peak = max(max(uBeat, uVolume), max(uBass, uTreble));
-    float particleGain = smoothstep(0.62, 0.92, peak);
-
-    for (int i = 0; i < 14; i++) {
-        float fi = float(i);
-        float seed = floor(uTime * 5.0);
-        float px = hash21(vec2(fi + 1.0, seed + 3.0));
-        float py = 0.075 + hash21(vec2(fi + 9.0, seed + 17.0)) * 0.15;
-
-        vec2 particlePos = vec2(px, py);
-        float pd = length((vUv - particlePos) * vec2(uResolution.x / uResolution.y, 1.0));
-        float particle = exp(-pd * 220.0) * particleGain;
-
-        color += vec3(0.25, 0.8, 1.0) * particle * oscArea;
-    }
-
-    // Viñeta suave.
-    vec2 vignetteUv = vUv * (1.0 - vUv.yx);
-    float vignette = pow(max(vignetteUv.x * vignetteUv.y * 16.0, 0.0), 0.18);
     color *= vignette;
-
+    color = 1.0 - exp(-color * (1.25 + uVolume * 0.35));
+    color = pow(max(color, 0.0), vec3(1.0 / 2.2));
     gl_FragColor = vec4(color, 1.0);
 }

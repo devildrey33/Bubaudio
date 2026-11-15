@@ -9,6 +9,7 @@ import liquidorb     from "./liquidorb.frag?raw";
 import barras        from "./barras.frag?raw";
 import livingorb     from "./livingorb.frag?raw";
 import livingorb2    from "./livingorb2.frag?raw";
+import livingorb3    from "./livingorb3.frag?raw";
 import dualwaveform  from "./dualwaveform.frag?raw";
 import digitalocean  from "./digitalocean.frag?raw";
 import digitalocean2 from "./digitalocean2.frag?raw";
@@ -27,13 +28,14 @@ const shaders = [
     { name : "Liquid Orb",   fragment : liquidorb    },
     { name : "Living Orb",   fragment : livingorb    },
     { name : "Living Orb 2", fragment : livingorb2   },
+    { name : "Living Orb 3", fragment : livingorb3   },
     { name : "Dual Wave",    fragment : dualwaveform },
     { name : "DigitalOcean", fragment : digitalocean },
     { name : "Plasma",       fragment : plasma       },
     { name : "Tunnel",       fragment : tunnel       },
     { name : "krustyrobots", fragment : krustyrobots },
-    { name : "krustyrl",     fragment : krustyrl },
-    { name : "freshquagga",  fragment : freshquagga },
+    { name : "krustyrl",     fragment : krustyrl     },
+    { name : "freshquagga",  fragment : freshquagga  },
 ];
 
 export default {

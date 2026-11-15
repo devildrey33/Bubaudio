@@ -1,11 +1,21 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+
+import ContextMenu from "./ContextMenu.js";
+
+
 export default class LibraryPanel {
 
     #container;
     #library;
+    #player;
+    #queuePanel;
+    #contextMenu;
 
-    constructor(library, containerId = "library-tree") {
+    constructor(library, player, queuePanel, containerId = "library-tree") {
 
         this.#library = library;
+        this.#player = player;
+        this.#queuePanel = queuePanel;
         this.#container = document.getElementById(containerId);
 
         if (!this.#container) {
@@ -13,6 +23,16 @@ export default class LibraryPanel {
                 `LibraryPanel: no se encontró el contenedor '${containerId}'`
             );
         }
+
+
+        this.#contextMenu = new ContextMenu();
+        this.#contextMenu.attach(
+            this.#container,
+            event => this.#getContextMenuItems(event),
+            {
+                keepOpenElement: this.#container.closest("#library-panel")
+            }
+        );
 
         this.render();
     }
@@ -49,6 +69,8 @@ export default class LibraryPanel {
 
         const artistNode = document.createElement("details");
         artistNode.className = "library-node library-artist";
+        artistNode.dataset.libraryType = "artist";
+        artistNode.dataset.libraryId = artist.id;
 
         const artistLabel = document.createElement("summary");
         artistLabel.className = "library-row";
@@ -80,6 +102,8 @@ export default class LibraryPanel {
 
         const albumNode = document.createElement("details");
         albumNode.className = "library-node library-album";
+        albumNode.dataset.libraryType = "album";
+        albumNode.dataset.libraryId = album.id;
 
         const albumLabel = document.createElement("summary");
         albumLabel.className = "library-row";
@@ -99,11 +123,159 @@ export default class LibraryPanel {
         for (const track of tracks) {
             const trackRow = document.createElement("div");
             trackRow.className = "library-row library-track";
+            trackRow.dataset.libraryType = "track";
+            trackRow.dataset.libraryId = track.id;
             trackRow.textContent = track.title;
             trackList.appendChild(trackRow);
         }
 
         albumNode.appendChild(trackList);
         return albumNode;
+    }
+
+
+    #getContextMenuItems(event) {
+
+        const node = event.target instanceof Element
+            ? event.target.closest("[data-library-type]")
+            : null;
+
+        if (!node || !this.#container.contains(node)) {
+            return [];
+        }
+
+        const type = node.dataset.libraryType;
+        const id = node.dataset.libraryId;
+        const libraryItem = this.#findLibraryItem(type, id);
+
+        if (!libraryItem) {
+            return [];
+        }
+
+        const tracks = this.#getNodeTracks(type, libraryItem);
+
+        return [
+            {
+                label: "Añadir a cola",
+                icon: "＋",
+                disabled: tracks.length === 0,
+                action: () => this.#addTracksToQueue(tracks)
+            },
+            {
+                label: "Añadir a nueva cola",
+                icon: "▤",
+                disabled: tracks.length === 0,
+                action: () => this.#replaceQueue(tracks)
+            },
+            {
+                label: "Mostrar carpeta",
+                icon: "📂",
+                action: () => this.#showFolder(libraryItem.path)
+            }
+        ];
+    }
+
+
+    #findLibraryItem(type, id) {
+
+        const items = {
+            artist: this.#library.artists,
+            album: this.#library.albums,
+            track: this.#library.tracks
+        }[type];
+
+        return items?.find(item => item.id === id) ?? null;
+    }
+
+
+    #getNodeTracks(type, item) {
+
+        if (type === "track") {
+            return [item];
+        }
+
+        if (type === "album") {
+            return this.#sortTracks(
+                this.#library.getAlbumTracks(item.id)
+            );
+        }
+
+        if (type === "artist") {
+            const albums = this.#library
+                .getArtistAlbums(item.id)
+                .sort((a, b) => a.title.localeCompare(b.title, "es", {
+                    numeric: true,
+                    sensitivity: "base"
+                }));
+
+            return albums.flatMap(album =>
+                this.#sortTracks(this.#library.getAlbumTracks(album.id))
+            );
+        }
+
+        return [];
+    }
+
+
+    #sortTracks(tracks) {
+        return tracks.sort((a, b) =>
+            a.title.localeCompare(b.title, "es", {
+                numeric: true,
+                sensitivity: "base"
+            })
+        );
+    }
+
+
+    #addTracksToQueue(tracks) {
+
+        const queue = this.#player.queue;
+
+        if (queue.items.length === 0) {
+            queue.setTracks(tracks);
+        }
+        else {
+            queue.addMany(tracks);
+        }
+
+        this.#refreshQueuePanel(queue);
+    }
+
+
+    async #replaceQueue(tracks) {
+        try {
+            await this.#player.playQueue(tracks);
+        }
+        catch (error) {
+            console.error(
+                "LibraryPanel: no se pudo iniciar la nueva cola",
+                error
+            );
+        }
+
+        this.#refreshQueuePanel(this.#player.queue);
+    }
+
+
+    #refreshQueuePanel(queue) {
+
+        this.#queuePanel.setQueue(queue);
+
+        if (queue.currentQueueId !== null) {
+            this.#queuePanel.setCurrentTrack(queue.currentQueueId);
+        }
+    }
+
+
+    async #showFolder(path) {
+        try {
+            await revealItemInDir(path);
+        }
+        catch (error) {
+            console.error(
+                `LibraryPanel: no se pudo mostrar la ruta '${path}'`,
+                error
+            );
+        }
     }
 }

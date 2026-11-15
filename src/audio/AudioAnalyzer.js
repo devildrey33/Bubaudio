@@ -10,9 +10,21 @@
  */
 import { readFile } from "@tauri-apps/plugin-fs";
 
+/**
+ * Reproduce audio local y expone muestras para el visualizador.
+ *
+ * El audio se reproduce con un HTMLAudioElement y se conecta a un
+ * AnalyserNode. En cada llamada a update() se refrescan el espectro y la
+ * forma de onda, además de calcular niveles suavizados para graves, medios,
+ * agudos y volumen. También genera pulsos breves cuando detecta una subida
+ * relativa e inesperada en graves, medios o agudos.
+ *
+ * Los valores de nivel se normalizan entre 0 y 1, pero representan los bytes
+ * del analizador Web Audio; no son porcentajes de potencia acústica.
+ */
 export default class AudioAnalyzer {
 
-    // Rangos de frecuencia utilizados para las bandas
+    // Límites en Hz de las bandas usadas para los medidores y los pulsos.
     static BASS_MIN = 20;
     static BASS_MAX = 250;
 
@@ -22,35 +34,50 @@ export default class AudioAnalyzer {
     static TREBLE_MIN = 4000;
     static TREBLE_MAX = 16000;
 
-    // Factor de suavizado
+    // Peso de la muestra nueva al actualizar los niveles expuestos.
+    // Un valor mayor reacciona más rápido, pero también deja pasar más variación.
     static SMOOTHING = 0.2;
 
-    // Umbral utilizado para detectar beats
-    static BEAT_THRESHOLD = 0.15;
+    // El detector mantiene una referencia lenta del nivel habitual de cada banda.
+    // Se actualiza una vez por frame; un valor bajo evita que esa referencia
+    // siga rápidamente un transitorio y lo oculte.
+    static TRANSIENT_BASELINE_SMOOTHING = 0.02;
+
+    // Evita disparos causados por variaciones diminutas cuando la señal está baja.
+    static TRANSIENT_MIN_DELTA = 0.025;
+
+    // Además del mínimo anterior, exige que la subida tenga tamaño relativo
+    // respecto al nivel habitual de la banda.
+    static TRANSIENT_RELATIVE_THRESHOLD = 0.15;
+
+    // El detector vuelve a quedar armado cuando la subida cae por debajo de
+    // esta fracción del umbral. Esta histéresis evita repetir un pulso en cada frame.
+    static TRANSIENT_REARM_RATIO = 0.5;
 
 
-    // Contexto principal de Web Audio API
+    // Contexto y nodos de Web Audio API:
+    // HTMLAudioElement -> MediaElementAudioSourceNode -> AnalyserNode -> salida.
     #audioContext;
 
-    // Elemento HTML de reproducción
+    // Elemento que carga y reproduce el archivo decodificado por el navegador.
     #audioElement;
 
-    // Nodo fuente
+    // Convierte el HTMLAudioElement en una fuente conectable al grafo de audio.
     #source;
 
-    // Analizador FFT
+    // Calcula los datos de frecuencia y de dominio temporal.
     #analyser;
 
-    // Datos de frecuencia
+    // Bytes de magnitud por bin de frecuencia; Web Audio los entrega en el rango 0-255.
     #fftData;
 
-    // Datos de forma de onda
+    // Bytes de la forma de onda en el tiempo; el silencio suele estar alrededor de 128.
     #timeData;
 
-    // Tamaño FFT
+    // Número de muestras de la FFT. El analizador produce fftSize / 2 bins.
     #fftSize;
 
-    // Valores suavizados
+    // Niveles suavizados que consumen los medidores y los shaders.
     #bass = 0;
 
     #mid = 0;
@@ -61,11 +88,36 @@ export default class AudioAnalyzer {
 
     #beat = 0;
 
+    #midBeat = 0;
+
+    #trebleBeat = 0;
+
+    // Referencias lentas usadas para medir subidas, no el volumen absoluto.
+    #bassBaseline = 0;
+
+    #midBaseline = 0;
+
+    #trebleBaseline = 0;
+
+    // Impide interpretar la primera muestra como una subida desde cero.
+    #hasTransientBaseline = false;
+
+    // Cada detector solo produce un pulso mientras la señal permanezca por
+    // encima del umbral; se rearma cuando la subida se relaja.
+    #bassTransientArmed = true;
+
+    #midTransientArmed = true;
+
+    #trebleTransientArmed = true;
+
+    // URL temporal asociada al Blob del archivo actualmente cargado.
     #blobUrl = null;
 
     /**
-     * Constructor.
-     * @param {Number} fftSize
+     * Crea el grafo de reproducción y los buffers del analizador.
+     *
+     * @param {Number} fftSize Tamaño de la FFT. Web Audio requiere un valor
+     * válido admitido por AnalyserNode; por defecto se usan 2048 muestras.
      */
     constructor(fftSize = 2048) {
 
@@ -80,25 +132,33 @@ export default class AudioAnalyzer {
         this.#analyser = this.#audioContext.createAnalyser();
         this.#analyser.fftSize = this.#fftSize;
 
+        // El analizador está en la ruta de salida, así que observa el mismo
+        // audio que se escucha, sin reemplazar la reproducción.
         this.#source.connect(this.#analyser);
         this.#analyser.connect(this.#audioContext.destination);
 
+        // frequencyBinCount y el número de muestras temporales son fftSize / 2.
         this.#fftData = new Uint8Array(fftSize / 2);
         this.#timeData = new Uint8Array(fftSize / 2);
     }
 
 
     /**
-     * Carga un archivo de audio.
+     * Carga un archivo local en el elemento de audio.
      *
-     * Se lee mediante Tauri y se convierte a Blob para
-     * evitar las restricciones del WebView con rutas
-     * locales y recursos UNC.
+     * Tauri lee los bytes del archivo y se crea un Blob URL temporal. Esto
+     * evita depender de que el WebView pueda resolver directamente rutas
+     * locales o UNC. La URL anterior se revoca antes de reemplazarla para
+     * liberar sus recursos.
      *
-     * @param {String} path
+     * La extensión se usa para asignar el MIME type que espera el navegador;
+     * si no se reconoce, se conserva audio/mpeg como valor predeterminado.
+     *
+     * @param {String} path Ruta absoluta del archivo de audio.
      */
     async load(path) {
 
+        // Detener la pista anterior antes de reemplazar su origen.
         this.stop();
 
         // Liberar el Blob anterior para evitar fugas
@@ -112,10 +172,10 @@ export default class AudioAnalyzer {
             this.#blobUrl = null;
         }
 
-        // Leer el fichero completo.
+        // readFile devuelve los bytes que se usarán como contenido del Blob.
         const data = await readFile(path);
 
-        // Intentar deducir el mime type.
+        // Obtener la extensión sin distinguir mayúsculas y minúsculas.
         const extension = path
             .split(".")
             .pop()
@@ -150,7 +210,8 @@ export default class AudioAnalyzer {
                 break;
         }
 
-        // Crear Blob reproducible por HTMLAudioElement.
+        // El Blob URL permite que HTMLAudioElement cargue los bytes locales
+        // como si fueran un recurso reproducible por el navegador.
         const blob = new Blob(
             [data],
             { type : mimeType }
@@ -167,7 +228,10 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Inicia la reproducción.
+     * Inicia o reanuda la reproducción del archivo cargado.
+     *
+     * Se devuelve la Promise de HTMLMediaElement.play() para que el llamador
+     * pueda esperar el inicio o gestionar errores del navegador.
      */
     play() {
         return this.#audioElement.play();
@@ -175,7 +239,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Pausa la reproducción.
+     * Pausa el elemento de audio sin reiniciar su posición.
      */
     pause() {
         this.#audioElement.pause();
@@ -183,7 +247,9 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Reanuda el AudioContext.
+     * Reactiva el contexto de Web Audio si el sistema o el navegador lo
+     * dejaron suspendido. Esto es independiente de iniciar la pista:
+     * play() controla el elemento y este método el grafo de análisis/salida.
      */
     async resume() {
         if (this.#audioContext && this.#audioContext.state === "suspended") {
@@ -193,25 +259,34 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Actualiza FFT y waveform.
-     * Debe llamarse una vez por frame.
+     * Lee una nueva muestra de audio y actualiza todos los valores públicos.
+     *
+     * Debe llamarse una vez por frame desde el bucle del visualizador. Primero
+     * actualiza los buffers de frecuencia y forma de onda, luego suaviza los
+     * niveles para su presentación y, por separado, compara las bandas sin
+     * suavizar con una referencia lenta para encontrar transitorios.
      */
     update() {
 
+        // Permite que la actualización sea inocua si el analizador no existe.
         if (!this.#analyser) {
             return;
         }
 
+        // Estos métodos escriben en los TypedArrays proporcionados.
         this.#analyser.getByteFrequencyData(this.#fftData);
         this.#analyser.getByteTimeDomainData(this.#timeData);
 
+        // Medias normalizadas de los bins que corresponden a cada intervalo Hz.
         const bass = this.#averageBand(AudioAnalyzer.BASS_MIN, AudioAnalyzer.BASS_MAX);
 
         const mid = this.#averageBand(AudioAnalyzer.MID_MIN, AudioAnalyzer.MID_MAX);
         const treble = this.#averageBand(AudioAnalyzer.TREBLE_MIN, AudioAnalyzer.TREBLE_MAX);
         const volume = this.#computeVolume();
 
-        // Suavizado
+        // Suavizado exponencial: cada nivel retiene el 80% del valor anterior
+        // y añade el 20% de la muestra nueva. Así se reducen vibraciones en UI
+        // sin imponer el mismo retardo al detector de transitorios.
         this.#bass += (bass - this.#bass) * AudioAnalyzer.SMOOTHING;
 
         this.#mid += (mid - this.#mid) * AudioAnalyzer.SMOOTHING;
@@ -220,17 +295,110 @@ export default class AudioAnalyzer {
 
         this.#volume += (volume - this.#volume) * AudioAnalyzer.SMOOTHING;
 
-        // Beat detector básico
-        if (bass > this.#bass + AudioAnalyzer.BEAT_THRESHOLD) {
-            this.#beat = 1.0;
+        // La referencia lenta permite detectar cambios respecto al nivel
+        // reciente: una banda alta pero estable deja de producir pulsos.
+        if (!this.#hasTransientBaseline) {
+            this.#bassBaseline = bass;
+            this.#midBaseline = mid;
+            this.#trebleBaseline = treble;
+            this.#hasTransientBaseline = true;
         }
 
+        // Solo interesan subidas; las bajadas se usan para permitir que el
+        // detector vuelva a armarse.
+        const bassChange = Math.max(0, bass - this.#bassBaseline);
+        const midChange = Math.max(0, mid - this.#midBaseline);
+        const trebleChange = Math.max(0, treble - this.#trebleBaseline);
+
+        // El umbral es el mayor entre un suelo absoluto de ruido y una fracción
+        // del nivel habitual. Por eso no hay un corte fijo de "50%" para todos
+        // los fragmentos musicales.
+        const bassThreshold = Math.max(
+            AudioAnalyzer.TRANSIENT_MIN_DELTA,
+            this.#bassBaseline * AudioAnalyzer.TRANSIENT_RELATIVE_THRESHOLD
+        );
+        const midThreshold = Math.max(
+            AudioAnalyzer.TRANSIENT_MIN_DELTA,
+            this.#midBaseline * AudioAnalyzer.TRANSIENT_RELATIVE_THRESHOLD
+        );
+        const trebleThreshold = Math.max(
+            AudioAnalyzer.TRANSIENT_MIN_DELTA,
+            this.#trebleBaseline * AudioAnalyzer.TRANSIENT_RELATIVE_THRESHOLD
+        );
+
+        // Histéresis: tras un pulso, no se permite otro hasta que el exceso
+        // caiga claramente por debajo del umbral completo.
+        if (bassChange < bassThreshold * AudioAnalyzer.TRANSIENT_REARM_RATIO) {
+            this.#bassTransientArmed = true;
+        }
+
+        if (midChange < midThreshold * AudioAnalyzer.TRANSIENT_REARM_RATIO) {
+            this.#midTransientArmed = true;
+        }
+
+        if (trebleChange < trebleThreshold * AudioAnalyzer.TRANSIENT_REARM_RATIO) {
+            this.#trebleTransientArmed = true;
+        }
+
+        // Cada banda genera su propio pulso para poder reaccionar por separado.
+        if (this.#bassTransientArmed && bassChange > bassThreshold) {
+            const strength = this.#transientStrength(bassChange, bassThreshold);
+            this.#beat = Math.max(this.#beat, strength);
+            this.#bassTransientArmed = false;
+        }
+
+        if (this.#midTransientArmed && midChange > midThreshold) {
+            const strength = this.#transientStrength(midChange, midThreshold);
+            this.#midBeat = Math.max(this.#midBeat, strength);
+            this.#midTransientArmed = false;
+        }
+
+        if (this.#trebleTransientArmed && trebleChange > trebleThreshold) {
+            const strength = this.#transientStrength(trebleChange, trebleThreshold);
+            this.#trebleBeat = Math.max(this.#trebleBeat, strength);
+            this.#trebleTransientArmed = false;
+        }
+
+        // La referencia sigue la señal despacio: así se adapta a canciones
+        // más suaves o más fuertes, pero no absorbe de inmediato cada subida.
+        this.#bassBaseline +=
+            (bass - this.#bassBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+        this.#midBaseline +=
+            (mid - this.#midBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+        this.#trebleBaseline +=
+            (treble - this.#trebleBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+
+        // Atenúa los pulsos en cada frame hasta que regresan a cero.
         this.#beat *= 0.92;
+        this.#midBeat *= 0.92;
+        this.#trebleBeat *= 0.92;
+    }
+
+    /**
+     * Convierte el exceso sobre el umbral en la amplitud del pulso.
+     *
+     * Una subida apenas superior al umbral empieza en 0.35; al crecer el
+     * exceso, la intensidad sube linealmente hasta 1. El shader recibe así
+     * una envolvente suave en lugar de un simple valor booleano.
+     *
+     * @param {Number} change Subida actual por encima de la referencia lenta.
+     * @param {Number} threshold Umbral que debe superar esa subida.
+     * @returns {Number} Intensidad limitada al intervalo 0-1.
+     */
+    #transientStrength(change, threshold) {
+        return Math.min(
+            1,
+            0.35 + (change - threshold) / (threshold * 2) * 0.65
+        );
     }
 
 
     /**
-     * Calcula el volumen medio.
+     * Calcula el promedio de todos los bins del espectro.
+     *
+     * El resultado se normaliza al rango 0-1 a partir de los bytes de
+     * getByteFrequencyData. Incluye todos los bins, no es una medición
+     * calibrada en sonoridad ni un porcentaje de potencia acústica.
      */
     #computeVolume() {
         let total = 0;
@@ -243,7 +411,16 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Calcula una banda de frecuencia.
+     * Calcula el promedio normalizado de los bins entre dos frecuencias.
+     *
+     * La separación de bins se obtiene a partir de Nyquist (la mitad de la
+     * frecuencia de muestreo) y del tamaño del buffer. El límite superior es
+     * inclusivo. Se promedian los bytes y se dividen entre 255 para devolver
+     * un valor entre 0 y 1 comparable entre bandas.
+     *
+     * @param {Number} minFreq Frecuencia inferior en Hz.
+     * @param {Number} maxFreq Frecuencia superior en Hz.
+     * @returns {Number} Media de la banda normalizada.
      */
     #averageBand(minFreq, maxFreq) {
         const nyquist = this.#audioContext.sampleRate * 0.5;
@@ -268,35 +445,59 @@ export default class AudioAnalyzer {
     }
 
 
+    /** Nivel suavizado de graves, normalizado de 0 a 1. */
     get bass() {
         return this.#bass;
     }
 
+    /** Nivel suavizado de medios, normalizado de 0 a 1. */
     get mid() {
         return this.#mid;
     }
 
+    /** Nivel suavizado de agudos, normalizado de 0 a 1. */
     get treble() {
         return this.#treble;
     }
 
+    /** Promedio normalizado de todo el espectro de frecuencias. */
     get volume() {
         return this.#volume;
     }
 
+    /** Envolvente decreciente del último transitorio detectado en graves. */
     get beat() {
         return this.#beat;
     }
 
+    /** Envolvente decreciente del último transitorio detectado en medios. */
+    get midBeat() {
+        return this.#midBeat;
+    }
+
+    /** Envolvente decreciente del último transitorio detectado en agudos. */
+    get trebleBeat() {
+        return this.#trebleBeat;
+    }
+
+    /**
+     * Buffer de frecuencia actual. Se reutiliza cada frame para evitar
+     * reservar memoria; quien lo lea no debe conservarlo como una instantánea.
+     */
     get spectrum() {
         return this.#fftData;
     }
 
+    /**
+     * Buffer de forma de onda actual, también reutilizado cada frame.
+     */
     get waveform() {
         return this.#timeData;
     }
 
-
+    /**
+     * Libera los recursos del analizador y la URL del Blob.
+     */
     async destroy() {
         this.pause();
 
@@ -315,7 +516,7 @@ export default class AudioAnalyzer {
     }
 
     /**
-     * Detiene la reproducción.
+     * Detiene la reproducción y devuelve la posición de la pista al inicio.
      */
     stop() {
         if (!this.#audioElement) {
@@ -328,7 +529,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Posición actual en segundos.
+     * Posición actual del elemento de audio, en segundos.
      */
     get currentTime() {
         return this.#audioElement ? this.#audioElement.currentTime : 0;
@@ -336,7 +537,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Duración total en segundos.
+     * Duración total de la pista, en segundos.
      */
     get duration() {
         return this.#audioElement ? this.#audioElement.duration || 0 : 0;
@@ -344,7 +545,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Volumen actual.
+     * Volumen de salida del HTMLAudioElement, en el rango 0-1.
      */
     get volumeLevel() {
         return this.#audioElement.volume;
@@ -352,7 +553,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Modifica el volumen.
+     * Ajusta el volumen de salida y limita el valor al rango admitido.
      */
     set volumeLevel(value) {
         this.#audioElement.volume = Math.min(1, Math.max(0, value));
@@ -360,7 +561,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Cambia la posición de reproducción.
+     * Busca una posición de la pista, expresada en segundos.
      */
     seek(seconds) {
         if (!this.#audioElement) {
@@ -371,7 +572,7 @@ export default class AudioAnalyzer {
 
 
     /**
-     * Estado actual.
+     * Indica si el elemento está reproduciendo en este momento.
      */
     get isPlaying() {
         return (this.#audioElement && !this.#audioElement.paused);

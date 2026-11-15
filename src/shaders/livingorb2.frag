@@ -11,667 +11,712 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;
+uniform float uTrebleBeat;
 
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
 #define PI 3.14159265359
-#define TAU 6.28318530718
+#define TWO_PI 6.28318530718
 
-// --------------------------------------------------
-// UTILIDADES
-// --------------------------------------------------
-
-float hash(float n) {
-    return fract(sin(n * 127.1) * 43758.5453123);
+float hash(vec2 p)
+{
+    return fract(
+        sin(dot(p, vec2(127.1, 311.7))) *
+        43758.5453
+    );
 }
 
-float audioWave(float x) {
-    return texture2D(
-        uWaveform,
-        vec2(fract(x), 0.0)
-    ).r * 2.0 - 1.0;
+vec2 direction8(float index)
+{
+    const float DIAGONAL = 0.70710678;
+
+    if (index < 0.5)
+    {
+        return vec2(0.0, 1.0);
+    }
+
+    if (index < 1.5)
+    {
+        return vec2(DIAGONAL, DIAGONAL);
+    }
+
+    if (index < 2.5)
+    {
+        return vec2(1.0, 0.0);
+    }
+
+    if (index < 3.5)
+    {
+        return vec2(DIAGONAL, -DIAGONAL);
+    }
+
+    if (index < 4.5)
+    {
+        return vec2(0.0, -1.0);
+    }
+
+    if (index < 5.5)
+    {
+        return vec2(-DIAGONAL, -DIAGONAL);
+    }
+
+    if (index < 6.5)
+    {
+        return vec2(-1.0, 0.0);
+    }
+
+    return vec2(-DIAGONAL, DIAGONAL);
 }
 
-float audioSpectrum(float x) {
-    return texture2D(
-        uSpectrum,
-        vec2(clamp(x, 0.0, 1.0), 0.0)
-    ).r;
+vec2 randomMotionTarget(float stepIndex, float creatureId, vec2 amplitude)
+{
+    float seed = creatureId + 1.0;
+    float directionIndex = floor(
+        hash(vec2(stepIndex + seed * 17.13, seed * 31.7)) * 8.0
+    );
+    vec2 direction = direction8(directionIndex);
+    float targetDistance = 10.0;
+
+    if (abs(direction.x) > 0.5)
+    {
+        targetDistance = min(targetDistance, amplitude.x / abs(direction.x));
+    }
+
+    if (abs(direction.y) > 0.5)
+    {
+        targetDistance = min(targetDistance, amplitude.y / abs(direction.y));
+    }
+
+    return direction * targetDistance;
 }
 
-float angleDifference(float a, float b) {
+vec2 creatureMotion(float creatureId, float time, vec2 amplitude)
+{
+    float seed = creatureId + 1.0;
+    float motionDuration = mix(
+        5.0,
+        10.0,
+        hash(vec2(seed * 19.1, seed * 31.7))
+    );
+    float motionPhase = hash(vec2(seed * 47.3, seed * 11.9));
+    float motionTime = time / motionDuration + motionPhase;
+    float motionStep = floor(motionTime);
+    float motionProgress = fract(motionTime);
+    float transition = smoothstep(0.0, 0.38, motionProgress);
+    return mix(
+        randomMotionTarget(motionStep - 1.0, creatureId, amplitude),
+        randomMotionTarget(motionStep, creatureId, amplitude),
+        transition
+    );
+}
+
+vec2 creatureHome(float creatureId, float creatureGroup, float aspect)
+{
+    float localIndex = mod(creatureId, 8.0);
+    float column = mod(localIndex, 4.0);
+    float row = floor(localIndex / 4.0);
+    float laneStart = mix(-aspect, 0.0, creatureGroup);
+    float x = laneStart + (column + 0.5) * aspect * 0.25;
+    float y = mix(-0.28, 0.28, row);
+    float seed = creatureId + 1.0;
+    x += (hash(vec2(seed * 13.7, seed * 29.1)) - 0.5) * aspect * 0.08;
+    y += (hash(vec2(seed * 41.3, seed * 5.7)) - 0.5) * 0.08;
+    return vec2(x, y);
+}
+
+vec2 voronoi(vec2 p, float time)
+{
+    vec2 cell = floor(p);
+    vec2 local = fract(p);
+    float nearest = 10.0;
+    float secondNearest = 10.0;
+
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            vec2 neighbor = vec2(float(x), float(y));
+            vec2 currentCell = cell + neighbor;
+            vec2 phase = TWO_PI * vec2(
+                hash(currentCell + vec2(19.1, 7.7)),
+                hash(currentCell + vec2(31.7, 41.3))
+            );
+            vec2 point = 0.5 + 0.22 * sin(phase + time);
+            float distanceToPoint = length(neighbor + point - local);
+
+            if (distanceToPoint < nearest)
+            {
+                secondNearest = nearest;
+                nearest = distanceToPoint;
+            }
+            else if (distanceToPoint < secondNearest)
+            {
+                secondNearest = distanceToPoint;
+            }
+        }
+    }
+
+    return vec2(nearest, secondNearest - nearest);
+}
+
+vec4 renderEye(
+    vec2 facePosition,
+    vec2 center,
+    vec2 eyeScale,
+    vec2 gaze,
+    float bass,
+    float treble,
+    float bassBeat,
+    float trebleBeat,
+    float time,
+    vec3 scleraTint,
+    vec3 irisPrimary,
+    vec3 irisSecondary,
+    vec3 eyeAccent
+)
+{
+    vec2 eyePosition = (facePosition - center) / eyeScale;
+    float eyeDistance = length(eyePosition);
+    float socket = 1.0 - smoothstep(1.0, 1.18, eyeDistance);
+    float eyeball = 1.0 - smoothstep(0.82, 0.94, eyeDistance);
+
+    vec3 eyeColor = vec3(0.004, 0.008, 0.028);
+    vec3 sclera = scleraTint
+                * (0.82 + max(eyePosition.y, 0.0) * 0.18)
+                * (1.0 + trebleBeat * 0.2);
+    eyeColor = mix(eyeColor, sclera, eyeball);
+
+    vec2 irisPosition = eyePosition - gaze;
+    float irisDistance = length(irisPosition);
+    float irisRadius = 0.37 + bass * 0.04 + bassBeat * 0.05
+                     + trebleBeat * 0.035;
+    float iris = 1.0 - smoothstep(
+        irisRadius - 0.025,
+        irisRadius + 0.025,
+        irisDistance
+    );
+    float irisRays = 0.7 + 0.3 * cos(
+        atan(irisPosition.y, irisPosition.x) * 18.0 + time * 0.8
+    );
+    vec3 irisColor = mix(
+        irisPrimary,
+        irisSecondary,
+        0.5 + 0.5 * sin(time * 0.5 + treble + trebleBeat * 0.8)
+    ) * irisRays * (1.0 + trebleBeat * 0.8);
+    eyeColor = mix(eyeColor, irisColor, iris);
+
+    float pupilRadius = 0.13 + bass * 0.10 + bassBeat * 0.12;
+    float pupil = 1.0 - smoothstep(
+        pupilRadius - 0.02,
+        pupilRadius + 0.02,
+        irisDistance
+    );
+    eyeColor = mix(eyeColor, vec3(0.001, 0.003, 0.012), pupil);
+
+    vec2 glintPosition = irisPosition - vec2(-0.12, 0.14);
+    float glint = exp(-dot(glintPosition, glintPosition) * 220.0);
+    eyeColor += vec3(0.8, 0.96, 1.0) * glint * eyeball
+              * (1.0 + trebleBeat * 0.5);
+
+    float eyeRim = smoothstep(0.78, 0.88, eyeDistance)
+                 * (1.0 - smoothstep(0.94, 1.02, eyeDistance));
+    eyeColor += eyeAccent * eyeRim
+              * (0.15 + treble * 0.25 + trebleBeat * 0.75);
+
+    return vec4(eyeColor, socket);
+}
+
+// --------------------------------------------
+// ANGULAR DISTANCE
+// --------------------------------------------
+
+float angleDifference(float a, float b)
+{
     return atan(sin(a - b), cos(a - b));
 }
 
-vec3 palette(float t) {
-    vec3 cyan = vec3(0.04, 0.9, 1.0);
-    vec3 blue = vec3(0.12, 0.32, 1.0);
-    vec3 violet = vec3(0.65, 0.12, 1.0);
-    vec3 pink = vec3(1.0, 0.12, 0.52);
+// --------------------------------------------
+// MAIN
+// --------------------------------------------
 
-    vec3 c = mix(cyan, blue, smoothstep(0.0, 0.35, t));
-    c = mix(c, violet, smoothstep(0.30, 0.7, t));
-    c = mix(c, pink, smoothstep(0.68, 1.0, t));
+void main()
+{
+    float t = uTime;
 
-    return c;
-}
+    vec2 screenUv = vUv * 2.0 - 1.0;
+    float aspect = uResolution.x / uResolution.y;
+    screenUv.x *= aspect;
+    float screenRadius = length(screenUv);
+    float beat = clamp(uBeat, 0.0, 1.0);
+    float trebleBeat = clamp(uTrebleBeat, 0.0, 1.0);
 
-// Distancia a un segmento y posición más cercana.
-float segmentDistance(
-    vec2 p,
-    vec2 a,
-    vec2 b,
-    out float closestT
-) {
-    vec2 ab = b - a;
+    vec3 deepBlue = vec3(0.008, 0.015, 0.09);
+    vec3 blue = vec3(0.015, 0.18, 0.65);
+    vec3 cyan = vec3(0.015, 0.85, 1.0);
+    vec3 violet = vec3(0.38, 0.04, 0.95);
+    vec3 pink = vec3(1.0, 0.06, 0.48);
+    vec3 white = vec3(0.85, 0.97, 1.0);
 
-    closestT = clamp(
-        dot(p - a, ab) / max(dot(ab, ab), 0.00001),
+    // ----------------------------------------
+    // DARK, AUDIO-REACTIVE VORONOI BACKGROUND
+    // ----------------------------------------
+
+    float audioEnergy = clamp(
+        uBass * 0.35 + uMid * 0.2 + uTreble * 0.1
+        + uVolume * 0.25 + beat * 0.1 + trebleBeat * 0.1,
         0.0,
         1.0
     );
-
-    return length(p - (a + ab * closestT));
-}
-
-// Curva cuadrática de Bézier.
-vec2 bezier(
-    vec2 a,
-    vec2 b,
-    vec2 c,
-    float t
-) {
-    float s = 1.0 - t;
-
-    return s * s * a +
-           2.0 * s * t * b +
-           t * t * c;
-}
-
-// --------------------------------------------------
-// ILUMINACIÓN ESFÉRICA
-// --------------------------------------------------
-
-vec3 sphereLighting(vec2 p, float r) {
-
-    float normalizedRadius = length(p) / r;
-
-    float z = sqrt(
-        max(0.0, 1.0 - normalizedRadius * normalizedRadius)
+    vec2 voronoiData = voronoi(
+        screenUv * 4.5,
+        t * (0.07 + audioEnergy * 0.14)
     );
-
-    vec3 normal = normalize(vec3(
-        p / r,
-        z
-    ));
-
-    vec3 lightDir = normalize(vec3(
-        -0.45,
-        0.65,
-        0.85
-    ));
-
-    vec3 viewDir = vec3(0.0, 0.0, 1.0);
-
-    float diffuse = max(dot(normal, lightDir), 0.0);
-
-    vec3 halfDir = normalize(lightDir + viewDir);
-
-    float specular = pow(
-        max(dot(normal, halfDir), 0.0),
-        48.0
+    float edgeCore = 1.0 - smoothstep(0.008, 0.028, voronoiData.y);
+    float edgeGlow = 1.0 - smoothstep(0.02, 0.14, voronoiData.y);
+    float cellCenters = exp(-voronoiData.x * 2.8);
+    float patternFade = 1.0 - smoothstep(0.9, 2.0, screenRadius);
+    float colorPhase = 0.5 + 0.5 * sin(
+        screenUv.x * 0.7 + screenUv.y * 0.9 + t * 0.16 + uTreble * 0.8
     );
+    vec3 patternColor = mix(cyan, pink, colorPhase);
+    float patternGain = 0.45 + audioEnergy * 0.65
+                      + beat * 0.35 + trebleBeat * 0.3;
+    vec3 background = vec3(0.0015, 0.002, 0.006);
+    background += patternColor
+                * (edgeCore * 0.42 + edgeGlow * 0.12 + cellCenters * 0.025)
+                * patternGain
+                * patternFade;
+    background += deepBlue * exp(-screenRadius * 1.3)
+                * (0.08 + uVolume * 0.1 + beat * 0.08);
 
-    float fresnel = pow(
-        1.0 - max(dot(normal, viewDir), 0.0),
-        3.0
-    );
-
-    vec3 baseColor = mix(
-        vec3(0.015, 0.12, 0.28),
-        vec3(0.04, 0.42, 0.62),
-        diffuse
-    );
-
-    vec3 result = baseColor * (0.25 + diffuse * 0.85);
-
-    result += vec3(0.12, 0.85, 1.0) * specular * 1.8;
-    result += vec3(0.18, 0.25, 1.0) * fresnel * 0.7;
-
-    return result;
-}
-
-// --------------------------------------------------
-// MAIN
-// --------------------------------------------------
-
-void main() {
-
-    vec2 p = vUv - 0.5;
-
-    float aspect = uResolution.x / max(uResolution.y, 1.0);
-
-    p.x *= aspect;
-    p *= 2.0;
-
-    float radius = length(p);
-    float angle = atan(p.y, p.x);
-
-    float time = uTime;
-
-    float bass = clamp(uBass, 0.0, 1.0);
-    float mid = clamp(uMid, 0.0, 1.0);
-    float treble = clamp(uTreble, 0.0, 1.0);
-    float volume = clamp(uVolume, 0.0, 1.0);
-    float beat = clamp(uBeat, 0.0, 1.0);
-
-    vec3 color = vec3(0.0);
-
-    // --------------------------------------------------
-    // 1. POSICIÓN Y TAMAÑO DEL NÚCLEO
-    // --------------------------------------------------
-
-    float corePulse =
-        1.0 +
-        bass * 0.16 +
-        beat * 0.12 +
-        sin(time * 1.8) * 0.018;
-
-    float coreRadius = 0.145 * corePulse;
-
-    float coreDist = radius - coreRadius;
-
-    float coreMask =
-        1.0 - smoothstep(
-            coreRadius - 0.006,
-            coreRadius + 0.006,
-            radius
+    // Render both independently so their identity and palette follow them
+    // across the screen, including when their silhouettes overlap.
+    vec3 color = background;
+    for (int creatureIndex = 0; creatureIndex < 16; creatureIndex++)
+    {
+        float creatureId = float(creatureIndex);
+        float creatureGroup = floor(creatureId / 8.0);
+        vec3 creatureDeepBlue = mix(
+            deepBlue,
+            vec3(0.10, 0.012, 0.018),
+            creatureGroup
         );
-
-    // Deformación de la membrana.
-    float membraneWave =
-        sin(angle * 5.0 + time * 1.5) *
-        sin(angle * 3.0 - time * 0.8);
-
-    float membraneDist =
-        radius -
-        coreRadius -
-        membraneWave * 0.008 * (0.3 + mid);
-
-    float membraneRim =
-        exp(-abs(membraneDist) * 75.0);
-
-    // --------------------------------------------------
-    // 2. TENTÁCULOS: CAPA TRASERA Y DELANTERA
-    // --------------------------------------------------
-
-    float backArms = 0.0;
-    float frontArms = 0.0;
-
-    float backBranches = 0.0;
-    float frontBranches = 0.0;
-
-    float frontTips = 0.0;
-    float backTips = 0.0;
-
-    float armColors = 0.0;
-
-    for (int i = 0; i < 9; i++) {
-
-        float fi = float(i);
-
-        float id = fi / 9.0;
-
-        float baseAngle = id * TAU;
-
-        float fft = audioSpectrum(
-            0.025 + id * 0.78
+        vec3 creatureBlue = mix(
+            blue,
+            vec3(0.68, 0.10, 0.018),
+            creatureGroup
         );
-
-        float wave = audioWave(
-            0.06 + id * 0.84
+        vec3 creatureCyan = mix(
+            cyan,
+            vec3(1.0, 0.34, 0.035),
+            creatureGroup
         );
-
-        // Longitud dinámica.
-        float armLength =
-            0.39 +
-            bass * 0.12 +
-            fft * 0.09 +
-            beat * 0.045 +
-            wave * 0.025;
-
-        // Movimiento orgánico.
-        float bend =
-            sin(time * 1.2 + fi * 1.7) * 0.18 +
-            mid * 0.15 +
-            wave * 0.12;
-
-        float secondaryBend =
-            sin(time * 1.8 + fi * 2.4) * 0.075;
-
-        vec2 direction = vec2(
-            cos(baseAngle),
-            sin(baseAngle)
+        vec3 creatureViolet = mix(
+            violet,
+            vec3(0.92, 0.025, 0.30),
+            creatureGroup
         );
-
-        vec2 perpendicular = vec2(
-            -direction.y,
-            direction.x
+        vec3 creaturePink = mix(
+            pink,
+            vec3(1.0, 0.72, 0.08),
+            creatureGroup
         );
+        vec3 creatureWhite = mix(
+            white,
+            vec3(1.0, 0.88, 0.62),
+            creatureGroup
+        );
+        vec3 creatureSclera = mix(
+            vec3(0.48, 0.72, 0.86),
+            vec3(0.94, 0.70, 0.48),
+            creatureGroup
+        );
+        float creatureBassBeat = beat * (1.0 - creatureGroup);
+        float creatureTrebleBeat = trebleBeat * creatureGroup;
+        float creatureBeat = max(creatureBassBeat, creatureTrebleBeat);
+        float creatureBandLevel = mix(uBass, uTreble, creatureGroup);
+        float sizeResponse = smoothstep(
+            0.015,
+            0.45,
+            clamp(creatureBandLevel, 0.0, 1.0)
+        );
+        const float CREATURE_EXTENT = 1.08;
+        float maximumCreatureScale = min(
+            0.40,
+            aspect * 0.5 / CREATURE_EXTENT
+        );
+        float creatureScale = min(
+            maximumCreatureScale * 1.07,
+            maximumCreatureScale * (
+                0.82 + sizeResponse * 0.18 + creatureBeat * 0.07
+            )
+        );
+        vec2 movement = creatureMotion(
+            creatureId,
+            uTime,
+            vec2(aspect * 0.65, 0.38)
+        );
+        vec2 creatureCenter =
+            creatureHome(creatureId, creatureGroup, aspect) + movement;
 
-        vec2 start = direction * coreRadius * 0.80;
-
-        vec2 end = direction * armLength;
-
-        vec2 control =
-            direction * (coreRadius + armLength) * 0.48 +
-            perpendicular * bend;
-
-        // Profundidad virtual por tentáculo.
-        float depth =
-            sin(fi * 2.399 + time * 0.12);
-
-        float isFront = smoothstep(-0.05, 0.15, depth);
-        float isBack = 1.0 - isFront;
-
-        // ----------------------------------------------
-        // GEOMETRÍA DEL BRAZO
-        // ----------------------------------------------
-
-        float armDistance = 10.0;
-        float armT = 0.0;
-
-        for (int j = 0; j < 14; j++) {
-
-            float tj = float(j) / 14.0;
-            float tn = float(j + 1) / 14.0;
-
-            vec2 a = bezier(
-                start,
-                control,
-                end,
-                tj
-            );
-
-            vec2 b = bezier(
-                start,
-                control,
-                end,
-                tn
-            );
-
-            float segmentT;
-
-            float d = segmentDistance(
-                p,
-                a,
-                b,
-                segmentT
-            );
-
-            float globalT = mix(tj, tn, segmentT);
-
-            if (d < armDistance) {
-                armDistance = d;
-                armT = globalT;
-            }
+        if (length(screenUv - creatureCenter) >
+            creatureScale * CREATURE_EXTENT)
+        {
+            continue;
         }
 
-        float armWidth =
-            mix(0.020, 0.004, armT) +
-            fft * 0.005;
+        vec2 uv = (
+            screenUv - creatureCenter
+        ) / creatureScale;
+        t = uTime + creatureId * 1.73;
 
-        float armMask =
-            1.0 - smoothstep(
-                armWidth * 0.45,
-                armWidth,
-                armDistance
-            );
+        float radius = length(uv);
+        float angle = atan(uv.y, uv.x);
+        float angle01 = fract(angle / TWO_PI);
+        float wave = texture2D(
+            uWaveform,
+            vec2(angle01, 0.0)
+        ).r * 2.0 - 1.0;
+        float fft = texture2D(
+            uSpectrum,
+            vec2(angle01, 0.0)
+        ).r;
 
-        float armFade =
-            smoothstep(0.0, 0.10, armT) *
-            (1.0 - smoothstep(0.88, 1.0, armT));
+        // ----------------------------------------
+        // ORGANIC BODY
+        // ----------------------------------------
 
-        float armEnergy = armMask * armFade;
+        float organic =
+            sin(angle * 4.0 + t * 0.8) * 0.018 +
+            sin(angle * 7.0 - t * 0.5) * 0.012;
 
-        float depthBrightness =
-            mix(0.32, 1.0, isFront);
+        float bodyRadius =
+            0.34 +
+            organic +
+            wave * (0.025 + creatureBandLevel * 0.055) +
+            creatureBeat * 0.04;
 
-        backArms += armEnergy * isBack;
-        frontArms += armEnergy * isFront;
+        float bodyDist = radius - bodyRadius;
 
-        armColors +=
-            armEnergy *
-            (0.5 + fft) *
-            depthBrightness;
-
-        // Punta del tentáculo.
-        float tipDistance = length(p - end);
-
-        float tip = exp(-tipDistance * 65.0);
-
-        frontTips += tip * isFront * (0.4 + fft);
-        backTips += tip * isBack * (0.4 + fft);
-
-        // ----------------------------------------------
-        // RAMIFICACIÓN SECUNDARIA
-        // ----------------------------------------------
-
-        float branchSide =
-            mix(-1.0, 1.0, hash(fi + 23.0));
-
-        float branchStart = 0.53 + hash(fi + 5.0) * 0.18;
-
-        vec2 branchOrigin = bezier(
-            start,
-            control,
-            end,
-            branchStart
+        float bodyMask = 1.0 - smoothstep(
+            -0.008,
+            0.008,
+            bodyDist
         );
 
-        float branchAngle =
-            baseAngle +
-            bend +
-            branchSide * 0.45;
+        // ----------------------------------------
+        // LIVING TENTACLES
+        // ----------------------------------------
 
-        vec2 branchDir = vec2(
-            cos(branchAngle),
-            sin(branchAngle)
-        );
+        float tentacleGlow = 0.0;
+        float tentacleCore = 0.0;
 
-        vec2 branchEnd =
-            branchOrigin +
-            branchDir * (
-                0.10 +
-                mid * 0.055 +
-                fft * 0.035
+        // Nine independent organic extensions
+        for (int i = 0; i < 9; i++)
+        {
+            float id = float(i);
+
+            float baseAngle = id * TWO_PI / 9.0 + creatureId * 0.35;
+
+            // Individual audio sample per tentacle
+            float audioIndex = fract(id / 9.0);
+
+            float armWave = texture2D(
+                uWaveform,
+                vec2(audioIndex, 0.0)
+            ).r * 2.0 - 1.0;
+
+            float armFFT = texture2D(
+                uSpectrum,
+                vec2(audioIndex, 0.0)
+            ).r;
+
+            // Different length for every tentacle
+            float armLength =
+                0.27 +
+                armFFT * 0.16 +
+                creatureBandLevel * 0.12 +
+                armWave * 0.04;
+
+            // Radial position along tentacle
+            float progress = clamp(
+                (radius - bodyRadius) / armLength,
+                0.0,
+                1.0
             );
 
-        vec2 branchControl =
-            mix(branchOrigin, branchEnd, 0.5) +
-            perpendicular *
-            branchSide *
-            (0.035 + sin(time + fi) * 0.012);
+            // Organic movement and curvature
+            float sway =
+                sin(
+                    progress * 5.0 +
+                    t * (1.2 + uMid * 2.0) +
+                    id * 2.1
+                ) * 0.11;
 
-        float branchDistance = 10.0;
+            float secondarySway =
+                sin(
+                    progress * 9.0 -
+                    t * 1.8 +
+                    id
+                ) * 0.035;
 
-        for (int k = 0; k < 7; k++) {
+            float curvature =
+                sway +
+                secondarySway +
+                armWave * 0.09;
 
-            float tk = float(k) / 7.0;
-            float tn = float(k + 1) / 7.0;
+            // Each tentacle has its own animated angle
+            float armAngle =
+                baseAngle +
+                curvature;
 
-            vec2 a = bezier(
-                branchOrigin,
-                branchControl,
-                branchEnd,
-                tk
+            float angularDist = abs(
+                angleDifference(angle, armAngle)
             );
 
-            vec2 b = bezier(
-                branchOrigin,
-                branchControl,
-                branchEnd,
-                tn
+            // Convert angular distance to pixels
+            float dist = angularDist * max(radius, 0.1);
+
+            // Organic taper
+            float width = mix(
+                0.019 + uBass * 0.004,
+                0.002,
+                progress
             );
 
-            float segmentT;
-
-            float d = segmentDistance(
-                p,
-                a,
-                b,
-                segmentT
+            // End of tentacle
+            float endFade = 1.0 - smoothstep(
+                0.88,
+                1.0,
+                progress
             );
 
-            branchDistance = min(branchDistance, d);
+            // Only render outside the body
+            float armVisibility = step(bodyRadius, radius) *
+                           (1.0 - smoothstep(
+                               armLength * 0.97,
+                               armLength,
+                               radius - bodyRadius
+                           ));
+
+            // Bright central filament
+            float core = 1.0 - smoothstep(
+                width * 0.2,
+                width * 0.65,
+                dist
+            );
+
+            // Soft energy halo
+            float glow = exp(
+                -dist / max(width * 2.5, 0.001)
+            );
+
+            tentacleCore +=
+                core * armVisibility * endFade;
+
+            tentacleGlow +=
+                glow * armVisibility * endFade *
+                (0.5 + armFFT);
         }
 
-        float branchWidth =
-            0.009 + treble * 0.002;
+        // ----------------------------------------
+        // SMOOTH SPHERE CORE
+        // ----------------------------------------
 
-        float branchMask =
-            1.0 - smoothstep(
-                branchWidth * 0.35,
-                branchWidth,
-                branchDistance
-            );
+        float sphereR = clamp(radius / bodyRadius, 0.0, 1.0);
 
-        float branchEnergy =
-            branchMask *
-            (0.35 + fft + treble * 0.4);
+        // ----------------------------------------
+        // 3D LIGHTING
+        // ----------------------------------------
 
-        backBranches += branchEnergy * isBack;
-        frontBranches += branchEnergy * isFront;
-    }
+        float sphereZ = sqrt(max(0.001, 1.0 - sphereR * sphereR));
 
-    // --------------------------------------------------
-    // 3. BRAZOS TRASEROS
-    // --------------------------------------------------
+        vec2 lightOffset = uv / max(bodyRadius, 0.001);
 
-    color += vec3(0.025, 0.16, 0.42) *
-        backArms * 0.75;
-
-    color += vec3(0.12, 0.12, 0.65) *
-        backBranches * 0.65;
-
-    color += vec3(0.08, 0.45, 0.9) *
-        backTips * 0.5;
-
-    // --------------------------------------------------
-    // 4. ILUMINACIÓN DEL NÚCLEO
-    // --------------------------------------------------
-
-    vec3 sphereColor = sphereLighting(
-        p,
-        coreRadius
-    );
-
-    color = mix(
-        color,
-        sphereColor,
-        coreMask
-    );
-
-    // Textura interna de plasma.
-    float innerPattern =
-        sin(angle * 8.0 + time * 1.6) *
-        cos(radius * 38.0 - time * 2.0);
-
-    float innerEnergy =
-        coreMask *
-        (0.5 + innerPattern * 0.16);
-
-    color += vec3(0.025, 0.25, 0.45) *
-        innerEnergy;
-
-    // Membrana exterior brillante.
-    color += vec3(0.10, 0.85, 1.0) *
-        membraneRim *
-        (0.4 + beat * 1.3);
-
-    // Reflejo adicional.
-    vec2 highlightPos = vec2(-0.055, 0.075);
-
-    float highlightDist =
-        length(p - highlightPos);
-
-    float highlight =
-        exp(-highlightDist * 35.0);
-
-    color += vec3(0.35, 0.8, 1.0) *
-        highlight *
-        coreMask *
-        0.55;
-
-    // --------------------------------------------------
-    // 5. BRAZOS DELANTEROS
-    // --------------------------------------------------
-
-    color += vec3(0.04, 0.48, 0.95) *
-        frontArms * 1.1;
-
-    color += vec3(0.30, 0.20, 1.0) *
-        frontBranches * 0.9;
-
-    color += vec3(0.10, 0.85, 1.0) *
-        frontTips *
-        (0.6 + beat * 0.9);
-
-    // Núcleo de luz de los brazos.
-    color += vec3(0.35, 0.85, 1.0) *
-        pow(frontArms, 3.0) *
-        0.65;
-
-    // --------------------------------------------------
-    // 6. FILAMENTOS ORBITALES
-    // --------------------------------------------------
-
-    float ringRadius =
-        0.43 +
-        sin(angle * 4.0 + time) * 0.018 +
-        bass * 0.025;
-
-    float ringDistance =
-        abs(radius - ringRadius);
-
-    float ringPattern =
-        sin(angle * 12.0 - time * 2.0);
-
-    float ring =
-        exp(-ringDistance * 85.0) *
-        smoothstep(-0.4, 0.4, ringPattern);
-
-    color += vec3(0.22, 0.12, 1.0) *
-        ring *
-        (0.15 + mid * 0.6);
-
-    // Anillo exterior tenue.
-    float outerRing =
-        exp(-abs(radius - 0.53) * 70.0);
-
-    color += vec3(0.04, 0.25, 0.75) *
-        outerRing *
-        0.15;
-
-    // --------------------------------------------------
-    // 7. PARTÍCULAS ORBITALES CON PROFUNDIDAD
-    // --------------------------------------------------
-
-    float particles = 0.0;
-
-    for (int j = 0; j < 30; j++) {
-
-        float fj = float(j);
-
-        float seed = hash(fj * 17.31);
-
-        float particleAngle =
-            seed * TAU +
-            time * (0.12 + seed * 0.28);
-
-        float particleRadius =
-            0.29 +
-            hash(fj * 4.7) * 0.32;
-
-        particleRadius +=
-            sin(time * 1.4 + fj * 2.0) * 0.025;
-
-        particleRadius += bass * 0.04;
-
-        vec2 particlePos = vec2(
-            cos(particleAngle),
-            sin(particleAngle)
-        ) * particleRadius;
-
-        float dist = length(p - particlePos);
-
-        float size =
-            0.0025 +
-            hash(fj * 9.2) * 0.003;
-
-        float particle =
-            exp(-dist / size);
-
-        float flicker =
-            0.45 +
-            0.55 * sin(time * 3.0 + fj * 5.0);
-
-        particles += particle * flicker;
-    }
-
-    color += vec3(0.12, 0.7, 1.0) *
-        particles *
-        (0.5 + treble * 1.2);
-
-    // --------------------------------------------------
-    // 8. ONDAS DE AUDIO EN LA ATMÓSFERA
-    // --------------------------------------------------
-
-    float waveformGlow = 0.0;
-
-    for (int i = 0; i < 3; i++) {
-
-        float fi = float(i);
-
-        float waveValue = audioWave(
-            fract(angle / TAU + fi * 0.33)
+        vec3 normal = normalize(
+            vec3(
+                -lightOffset.x * 0.8,
+                -lightOffset.y * 0.8,
+                sphereZ
+            )
         );
 
-        float waveRadius =
-            0.57 +
-            waveValue * 0.035 * (0.3 + volume);
-
-        float d = abs(radius - waveRadius);
-
-        waveformGlow +=
-            exp(-d * 100.0) *
-            (0.25 + volume * 0.6);
-    }
-
-    color += vec3(0.04, 0.35, 0.9) *
-        waveformGlow *
-        0.3;
-
-    // --------------------------------------------------
-    // 9. FLASH DE BEAT
-    // --------------------------------------------------
-
-    float beatGlow =
-        exp(-radius * 5.0) *
-        beat;
-
-    color += vec3(0.15, 0.38, 1.0) *
-        beatGlow *
-        0.6;
-
-    // --------------------------------------------------
-    // 10. ATMÓSFERA Y ACABADO
-    // --------------------------------------------------
-
-    float atmosphere =
-        exp(-abs(radius - 0.23) * 5.0);
-
-    color += vec3(0.08, 0.16, 0.8) *
-        atmosphere *
-        (0.08 + volume * 0.12);
-
-    float vignette =
-        1.0 - smoothstep(
-            0.58,
-            0.98,
-            length(p)
+        vec3 lightDir = normalize(
+            vec3(-0.5, 0.7, 0.8)
         );
 
-    color *= vignette;
+        float diffuse = max(
+            dot(normal, lightDir),
+            0.0
+        );
 
-    // Tonemapping.
-    color = color / (1.0 + color);
+        float highlight = pow(
+            max(
+                dot(
+                    reflect(-lightDir, normal),
+                    vec3(0.0, 0.0, 1.0)
+                ),
+                0.0
+            ),
+            24.0
+        );
 
-    color = pow(
-        max(color, vec3(0.0)),
-        vec3(0.85)
+        float rim = pow(
+            1.0 - sphereZ,
+            2.0
+        );
+
+        // ----------------------------------------
+        // COLOR PALETTE
+        // ----------------------------------------
+
+        vec3 plasmaColor = mix(
+            creatureDeepBlue,
+            creatureBlue,
+            1.0 - sphereR * 0.65
+        );
+
+        plasmaColor = mix(
+            plasmaColor,
+            creatureViolet,
+            (0.12 + 0.08 * sin(angle * 2.0 - t * 0.3 + uMid * 0.3))
+        );
+
+        // Surface illumination
+        plasmaColor *= 0.4 + diffuse * 0.75;
+
+        plasmaColor += creatureWhite * highlight * 1.5;
+        plasmaColor += creatureWhite * creatureBeat * (0.28 + rim * 0.65);
+
+        plasmaColor += creatureViolet * rim * 0.8;
+
+        plasmaColor += mix(creatureBlue, creatureCyan, 0.5 + 0.5 * sin(t))
+                     * exp(-sphereR * 3.5)
+                     * (0.12 + uBass * 0.35 + beat * 0.25);
+
+        vec2 facePosition = uv / max(bodyRadius, 0.001);
+        // Cada ojo elige de forma independiente una de ocho direcciones.
+        float gazeStep = floor(t / 3.0);
+        float gazeProgress = fract(t / 3.0);
+        float gazeSeed = 13.7 + creatureId * 89.3;
+        float previousDirection = floor(hash(vec2(gazeStep - 1.0, gazeSeed)) * 8.0);
+        float currentDirection = floor(hash(vec2(gazeStep, gazeSeed)) * 8.0);
+        float gazeBlend = smoothstep(0.0, 0.35, gazeProgress);
+        vec2 gazeOffset = mix(
+            direction8(previousDirection),
+            direction8(currentDirection),
+            gazeBlend
+        );
+        vec2 gaze = gazeOffset * min(
+            1.0,
+            0.30 / max(length(gazeOffset), 0.001)
+        );
+
+        vec4 eye = renderEye(
+            facePosition,
+            vec2(0.0, 0.02),
+            vec2(0.64, 0.50),
+            gaze,
+            uBass,
+            uTreble,
+            creatureBassBeat,
+            creatureTrebleBeat,
+            t,
+            creatureSclera,
+            creatureBlue,
+            creatureViolet,
+            creatureCyan
+        );
+        plasmaColor = mix(plasmaColor, eye.rgb, eye.a);
+
+        // ----------------------------------------
+        // TENTACLE COLORS
+        // ----------------------------------------
+
+        vec3 tentacleColor = mix(
+            creatureCyan,
+            creatureViolet,
+            0.5 + 0.5 * sin(angle * 3.0 + t)
+        );
+
+        tentacleColor += creaturePink * uTreble * 0.2;
+
+        vec3 tendrils =
+            tentacleColor * tentacleGlow * (0.8 + creatureBeat * 0.7);
+
+        tendrils += creatureWhite * tentacleCore * (1.2 + creatureBeat * 0.8);
+
+        // ----------------------------------------
+        // ENERGY AURA
+        // ----------------------------------------
+
+        float aura = exp(
+            -abs(radius - bodyRadius) * 16.0
+        );
+
+        aura *= 1.0 - bodyMask;
+
+        vec3 auraColor = mix(
+            creatureCyan,
+            creatureViolet,
+            0.5 + 0.5 * sin(t * 0.8)
+        );
+
+        // ----------------------------------------
+        // FINAL COMPOSITION
+        // ----------------------------------------
+
+        vec3 creatureColor = plasmaColor * bodyMask;
+        creatureColor += tendrils;
+        creatureColor += auraColor * aura * (0.35 + creatureBeat * 1.1);
+        creatureColor += creatureBlue *
+            exp(-radius * 4.0) *
+            bodyMask *
+            (0.15 + creatureBandLevel * 0.5);
+
+        float creatureAlpha = clamp(
+            bodyMask + tentacleGlow * 0.35 + tentacleCore * 0.5 + aura * 0.35,
+            0.0,
+            1.0
+        );
+        color = creatureColor + color * (1.0 - creatureAlpha);
+    }
+
+    // General volume
+    color *= 0.65 + uVolume * 1.4;
+
+    // Subtle vignette
+    color *= exp(-screenRadius * 0.6);
+
+    // Interpolate neighboring waveform samples so the trace stays smooth
+    // even when the audio texture uses nearest-neighbor filtering.
+    const float WAVEFORM_SIZE = 1024.0;
+    float waveformPosition = clamp(vUv.x, 0.0, 1.0) * (WAVEFORM_SIZE - 1.0);
+    float waveformIndex = floor(waveformPosition);
+    float waveformBlend = fract(waveformPosition);
+    float waveformSampleA = texture2D(
+        uWaveform,
+        vec2((waveformIndex + 0.5) / WAVEFORM_SIZE, 0.0)
+    ).r;
+    float waveformSampleB = texture2D(
+        uWaveform,
+        vec2((min(waveformIndex + 1.0, WAVEFORM_SIZE - 1.0) + 0.5) / WAVEFORM_SIZE, 0.0)
+    ).r;
+    float scopeWave = mix(waveformSampleA, waveformSampleB, waveformBlend) * 2.0 - 1.0;
+    float scopeY = -0.82 + scopeWave * (0.12 + uVolume * 0.06);
+    float scopeDistance = abs(screenUv.y - scopeY);
+    float scopeThickness = 1.2 / uResolution.y;
+    float scopeLine = 1.0 - smoothstep(
+        scopeThickness,
+        scopeThickness * 2.6,
+        scopeDistance
     );
+    float scopeGlow = exp(-scopeDistance * 55.0);
+    color += vec3(1.0) * (scopeLine * 1.6 + scopeGlow * 0.15) * patternFade;
+
+    // Tonemapping
+    color = 1.0 - exp(-color * 1.3);
 
     gl_FragColor = vec4(color, 1.0);
 }

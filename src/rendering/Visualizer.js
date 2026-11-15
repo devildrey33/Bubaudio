@@ -158,6 +158,14 @@ export default class Visualizer {
                 value : 0
             },
 
+            uMidBeat : {
+                value : 0
+            },
+
+            uTrebleBeat : {
+                value : 0
+            },
+
             uWaveform : {
                 value : this.#waveformTexture
             },
@@ -294,6 +302,12 @@ export default class Visualizer {
         this.#uniforms.uBeat.value =
             this.#audio.beat;
 
+        this.#uniforms.uMidBeat.value =
+            this.#audio.midBeat;
+
+        this.#uniforms.uTrebleBeat.value =
+            this.#audio.trebleBeat;
+
         this.#renderer.render(
             this.#scene,
             this.#camera
@@ -382,5 +396,10 @@ export default class Visualizer {
      */
     get uniforms() {
         return this.#uniforms;
+    }
+
+
+    get canvas() {
+        return this.#renderer.domElement;
     }
 }

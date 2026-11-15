@@ -1,11 +1,14 @@
 import shaderData from "./shaders";
 
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
 import AudioAnalyzer        from "./audio/AudioAnalyzer.js";
 import Visualizer           from "./rendering/Visualizer.js";
 
 import PlayerControls       from "./ui/PlayerControls.js";
 import QueuePanel           from "./ui/QueuePanel.js";
 import LibraryPanel         from "./ui/LibraryPanel.js";
+import AudioDebugPanel      from "./ui/AudioDebugPanel.js";
 import NowPlayingTooltip    from "./ui/NowPlayingTooltip.js";
 
 import PlayerSettings       from "./settings/PlayerSettings.js";
@@ -17,6 +20,10 @@ import Player               from "./playlist/Player.js";
 
 export default class Application {
 
+    #fullscreenToggleQueue = Promise.resolve();
+
+    #debugMode = true;
+
     constructor() {
         this.settings       = null;
         this.library        = null;
@@ -26,6 +33,7 @@ export default class Application {
         this.panelQueue     = null;
         this.panelLibrary   = null;
         this.panelControls  = null;
+        this.debugPanel     = null;
         this.renderer       = null;
     }
 
@@ -79,10 +87,18 @@ export default class Application {
 
         this.audio = new AudioAnalyzer();
 
+        if (this.#debugMode) {
+            this.debugPanel = new AudioDebugPanel(this.audio);
+        }
+
         this.player = new Player(this.audio, this.panelQueue);
 
         this.renderer = new Visualizer(this.audio);
         this.renderer.setShader(this.settings.shaderIndex);
+        this.renderer.canvas.addEventListener(
+            "dblclick",
+            () => this.#toggleFullscreen()
+        );
         this.renderer.start();
 
         //======================================================================
@@ -97,7 +113,11 @@ export default class Application {
         );
 
         this.panelQueue = new QueuePanel();
-        this.panelLibrary = new LibraryPanel(this.library);
+        this.panelLibrary = new LibraryPanel(
+            this.library,
+            this.player,
+            this.panelQueue
+        );
 
         this.nowPlayingTooltip= new NowPlayingTooltip();
 
@@ -143,6 +163,23 @@ export default class Application {
         this.player.addEventListener("pause", () => {
             console.log("PAUSE");
         });
+    }
+
+
+    #toggleFullscreen() {
+
+        this.#fullscreenToggleQueue = this.#fullscreenToggleQueue
+            .then(async () => {
+                const appWindow = getCurrentWindow();
+                const isFullscreen = await appWindow.isFullscreen();
+                await appWindow.setFullscreen(!isFullscreen);
+            })
+            .catch(error => {
+                console.error(
+                    "No se pudo alternar el modo de pantalla completa",
+                    error
+                );
+            });
     }
 
 }

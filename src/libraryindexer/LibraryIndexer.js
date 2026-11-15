@@ -104,13 +104,14 @@ export default class LibraryIndexer {
                 path : `${this.#musicPath}\\${artist.name}`
             };
 
-            this.addArtist(
-                artistData
-            );
-
+            const albumCount = this.#albums.length;
             await this.#scanAlbums(
                 artistData
             );
+
+            if (this.#albums.length > albumCount) {
+                this.addArtist(artistData);
+            }
         }
     }
 
@@ -142,13 +143,15 @@ export default class LibraryIndexer {
                 tracks : []
             };
 
-            this.addAlbum(albumData);
-
             await this.#scanAlbumFiles(
                 artist,
                 albumData,
                 albumPath
             );
+
+            if (albumData.tracks.length > 0) {
+                this.addAlbum(albumData);
+            }
         }
     }
 
@@ -418,9 +421,31 @@ export default class LibraryIndexer {
         const library = JSON.parse(json);
 
         this.#musicPath = library.musicPath ?? "";
-        this.#artists   = library.artists   ?? [];
-        this.#albums    = library.albums    ?? [];
-        this.#tracks    = library.tracks    ?? [];
+        this.#tracks   = library.tracks ?? [];
+
+        const artists = library.artists ?? [];
+        const albums = library.albums ?? [];
+        const trackIds = new Set(this.#tracks.map(track => track.id));
+
+        this.#albums = albums.filter(album =>
+            Array.isArray(album.tracks) &&
+            album.tracks.some(trackId => trackIds.has(trackId))
+        );
+
+        const artistNames = new Set(
+            this.#albums.map(album => album.artist)
+        );
+
+        this.#artists = artists.filter(artist =>
+            artistNames.has(artist.name)
+        );
+
+        if (
+            this.#albums.length !== albums.length ||
+            this.#artists.length !== artists.length
+        ) {
+            await this.save();
+        }
 
         return library;
     }

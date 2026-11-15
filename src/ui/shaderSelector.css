@@ -13,17 +13,73 @@
     left: 50%;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0 0 14px 14px;
-    background: rgba(0, 0, 0, 0.55);
+    gap: 8px;
+    width: min(320px, calc(100vw - 24px));
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    background: rgba(18, 18, 18, 0.82);
     backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     transform: translate(-50%, -120%);
     opacity: 0;
     pointer-events: none;
     transition: opacity 250ms ease, transform 250ms ease;
+}
+
+#btn-shader-prev,
+#btn-shader-next {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f2f2f2;
+    font: 600 16px/1 "Segoe UI", sans-serif;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+#btn-shader-prev:hover,
+#btn-shader-next:hover {
+    border-color: rgba(77, 163, 255, 0.65);
+    background: rgba(77, 163, 255, 0.2);
+}
+
+#btn-shader-prev:active,
+#btn-shader-next:active {
+    transform: scale(0.94);
+}
+
+#btn-shader-prev:focus-visible,
+#btn-shader-next:focus-visible,
+#shader-select:focus-visible {
+    outline: 2px solid #4da3ff;
+    outline-offset: 2px;
+}
+
+#shader-select {
+    flex: 1;
+    min-width: 0;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 9px;
+    background: #242424;
+    color: #f2f2f2;
+    font: 14px "Segoe UI", sans-serif;
+    cursor: pointer;
+}
+
+#shader-select option {
+    background: #242424;
+    color: #f2f2f2;
 }
 
 #shader-trigger:hover #shaderPanel {

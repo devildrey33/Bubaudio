@@ -60,6 +60,8 @@ export default class PlayerControls {
         this.#renderer = renderer;
 
         this.#cacheDom();
+        this.#volumeBar.value = this.#settings.volume * 100;
+        this.#player.setVolume(this.#settings.volume);
         this.#registerEvents();
         this.#populateShaders();
         this.#update();
@@ -177,9 +179,10 @@ export default class PlayerControls {
      */
     #onVolume() {
 
-        this.#player.setVolume(
-            this.#volumeBar.value / 100
-        );
+        const volume = this.#volumeBar.value / 100;
+
+        this.#player.setVolume(volume);
+        this.#settings.volume = volume;
     }
 
 

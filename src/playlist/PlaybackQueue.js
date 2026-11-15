@@ -89,6 +89,7 @@ export default class PlaybackQueue {
             queueId : crypto.randomUUID(),
             track
         }));
+        this.history = [];
 
         if (this.items.length === 0) {
             this.currentQueueId = null;

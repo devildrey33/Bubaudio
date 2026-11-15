@@ -9,7 +9,7 @@
     width: 10%;
     height: 100vh;
 
-    z-index: 100;
+    z-index: 1100;
 }
 
 #queue-panel {
