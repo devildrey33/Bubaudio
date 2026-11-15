@@ -75,6 +75,30 @@ export default class PlaybackQueue {
         return this.currentItem?.track || null;
     }
 
+    get orderedItems() {
+        if (!this.shuffle) {
+            return this.items;
+        }
+
+        const itemsById = new Map(
+            this.items.map(item => [item.queueId, item])
+        );
+
+        return this.shuffleOrder
+            .map(queueId => itemsById.get(queueId))
+            .filter(Boolean);
+    }
+
+    get isAtEnd() {
+        if (this.items.length === 0 || this.currentQueueId === null) {
+            return false;
+        }
+
+        return this.shuffle
+            ? this.shuffleIndex >= this.shuffleOrder.length - 1
+            : this.#currentIndex() >= this.items.length - 1;
+    }
+
 
     //==========================================================================
     // INICIALIZACIÓN
@@ -132,7 +156,7 @@ export default class PlaybackQueue {
 
         this.items.push(item);
 
-        this.#rebuildShuffle();
+        this.#syncShuffle();
 
         return item;
     }
@@ -147,9 +171,8 @@ export default class PlaybackQueue {
             });
         }
 
-        this.#rebuildShuffle();
+        this.#syncShuffle();
     }
-
 
     /**
      * Añade una canción justo después de la actual.
@@ -171,7 +194,19 @@ export default class PlaybackQueue {
             this.items.splice(currentIndex + 1, 0, item);
         }
 
-        this.#rebuildShuffle();
+        if (this.shuffle) {
+            const shuffleIndex = this.shuffleOrder.indexOf(
+                this.currentQueueId
+            );
+            const insertIndex = shuffleIndex === -1
+                ? 0
+                : shuffleIndex + 1;
+
+            this.shuffleOrder.splice(insertIndex, 0, item.queueId);
+            this.shuffleIndex = this.shuffleOrder.indexOf(
+                this.currentQueueId
+            );
+        }
 
         return item;
     }
@@ -205,7 +240,7 @@ export default class PlaybackQueue {
             this.currentQueueId = this.items[newIndex].queueId;
         }
 
-        this.#rebuildShuffle();
+        this.#syncShuffle();
 
         return true;
     }
@@ -229,7 +264,7 @@ export default class PlaybackQueue {
 
         this.items.splice(destinationIndex, 0, item);
 
-        this.#rebuildShuffle();
+        this.#syncShuffle();
 
         return true;
     }
@@ -306,13 +341,21 @@ export default class PlaybackQueue {
 
     setShuffle(enabled) {
 
+        enabled = Boolean(enabled);
+
         if (this.shuffle === enabled) {
             return;
         }
 
         this.shuffle = enabled;
 
-        this.#rebuildShuffle();
+        if (enabled) {
+            this.#rebuildShuffle();
+        }
+        else {
+            this.shuffleOrder = [];
+            this.shuffleIndex = -1;
+        }
     }
 
 
@@ -394,8 +437,6 @@ export default class PlaybackQueue {
 
             this.#pushHistory();
 
-            this.#rebuildShuffle();
-
             this.shuffleIndex = 0;
 
             this.currentQueueId = this.shuffleOrder[0];
@@ -427,7 +468,7 @@ export default class PlaybackQueue {
      */
     #rebuildShuffle() {
 
-        if (this.items.length === 0) {
+        if (!this.shuffle || this.items.length === 0) {
 
             this.shuffleOrder = [];
             this.shuffleIndex = -1;
@@ -454,6 +495,40 @@ export default class PlaybackQueue {
         }
 
         this.shuffleIndex = this.shuffleOrder.indexOf(currentId);
+    }
+
+    #syncShuffle() {
+
+        if (!this.shuffle) {
+            return;
+        }
+
+        const validIds = new Set(
+            this.items.map(item => item.queueId)
+        );
+        const order = this.shuffleOrder.filter(
+            queueId => validIds.has(queueId)
+        );
+        const existingIds = new Set(order);
+        const currentIndex = order.indexOf(this.currentQueueId);
+        const minimumInsertIndex = currentIndex === -1
+            ? 0
+            : currentIndex + 1;
+
+        for (const item of this.items) {
+            if (existingIds.has(item.queueId)) {
+                continue;
+            }
+
+            const insertIndex = minimumInsertIndex + Math.floor(
+                Math.random() * (order.length - minimumInsertIndex + 1)
+            );
+            order.splice(insertIndex, 0, item.queueId);
+            existingIds.add(item.queueId);
+        }
+
+        this.shuffleOrder = order;
+        this.shuffleIndex = order.indexOf(this.currentQueueId);
     }
 
 

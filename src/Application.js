@@ -92,6 +92,10 @@ export default class Application {
         }
 
         this.player = new Player(this.audio, this.panelQueue);
+        this.player.setShuffle(this.settings.shuffle);
+        this.player.setRepeatMode(
+            this.settings.repeat ? "queue" : "none"
+        );
 
         this.renderer = new Visualizer(this.audio);
         this.renderer.setShader(this.settings.shaderIndex);
@@ -109,10 +113,31 @@ export default class Application {
             this.player,
 //            this.player.queue,
             this.settings,
-            this.renderer
+            this.renderer,
+            this.library
         );
 
         this.panelQueue = new QueuePanel();
+        this.player.addEventListener("queuechanged", () => {
+            this.panelQueue.setQueue(this.player.queue);
+
+            if (this.player.queue.currentQueueId !== null) {
+                this.panelQueue.setCurrentTrack(
+                    this.player.queue.currentQueueId
+                );
+            }
+        });
+
+        this.player.addEventListener("shufflechange", () => {
+            this.panelQueue.setQueue(this.player.queue);
+
+            if (this.player.queue.currentQueueId !== null) {
+                this.panelQueue.setCurrentTrack(
+                    this.player.queue.currentQueueId
+                );
+            }
+        });
+
         this.panelLibrary = new LibraryPanel(
             this.library,
             this.player,

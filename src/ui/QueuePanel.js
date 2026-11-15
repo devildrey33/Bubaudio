@@ -30,7 +30,7 @@ export default class QueuePanel {
             return;
         }
 
-        this.#queue.items.forEach((queueItem, index) => {
+        this.#queue.orderedItems.forEach((queueItem, index) => {
 
             const element = document.createElement("div");
 

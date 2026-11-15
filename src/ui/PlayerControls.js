@@ -1,4 +1,7 @@
 import shaders from "../shaders";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import ContextMenu from "./ContextMenu.js";
 
 export default class PlayerControls {
 
@@ -25,7 +28,11 @@ export default class PlayerControls {
     #btnPrev;
     #btnNext;
     #btnFolder;
+    #btnShuffle;
+    #btnRepeat;
 
+    #library;
+    #repeatMenu;
 
     //--------------------------------------------------------------------------
     // CONTROLES DE PROGRESO
@@ -52,17 +59,22 @@ export default class PlayerControls {
      * @param {Player} player
      * @param {PlayerSettings} settings
      * @param {Visualizer} renderer
+     * @param {LibraryIndexer} library
      */
-    constructor(player, settings, renderer) {
+    constructor(player, settings, renderer, library) {
 
         this.#player = player;
         this.#settings = settings;
         this.#renderer = renderer;
+        this.#library = library;
 
         this.#cacheDom();
+        this.#repeatMenu = new ContextMenu();
         this.#volumeBar.value = this.#settings.volume * 100;
         this.#player.setVolume(this.#settings.volume);
         this.#registerEvents();
+        this.#updateShuffleButton();
+        this.#updateRepeatButton();
         this.#populateShaders();
         this.#update();
     }
@@ -78,6 +90,8 @@ export default class PlayerControls {
         this.#btnPrev = document.getElementById("btn-prev");
         this.#btnNext = document.getElementById("btn-next");
         this.#btnFolder = document.getElementById("btn-select-folder");
+        this.#btnShuffle = document.getElementById("btn-shuffle");
+        this.#btnRepeat = document.getElementById("btn-repeat");
 
         this.#progressBar = document.getElementById("progress-bar");
         this.#volumeBar = document.getElementById("volume-bar");
@@ -100,6 +114,24 @@ export default class PlayerControls {
 
         this.#btnPrev.addEventListener("click", () => this.#onPrevious());
         this.#btnNext.addEventListener("click", () => this.#onNext());
+        this.#btnShuffle.addEventListener("click", () => this.#onShuffle());
+        this.#btnRepeat.addEventListener("click", () => this.#openRepeatMenu());
+
+        this.#player.addEventListener("shufflechange", () => {
+            this.#updateShuffleButton();
+        });
+        this.#player.addEventListener("repeatchange", () => {
+            this.#updateRepeatButton();
+        });
+        this.#player.addEventListener("queuegenerationerror", (event) => {
+            console.error(
+                "No se pudo generar la lista al terminar la cola",
+                event.detail.error
+            );
+            window.alert(
+                `No se pudo generar la lista al terminar la cola: ${String(event.detail.error)}`
+            );
+        });
 
         this.#progressBar.addEventListener("input", () => this.#onSeek());
         this.#volumeBar.addEventListener("input", () => this.#onVolume());
@@ -154,6 +186,214 @@ export default class PlayerControls {
      */
     async #onNext() {
         await this.#player.next();
+    }
+
+    #onShuffle() {
+        const enabled = !this.#player.queue.shuffle;
+
+        this.#settings.shuffle = enabled;
+        this.#player.setShuffle(enabled);
+    }
+
+
+    #updateShuffleButton() {
+        const enabled = this.#player.queue.shuffle;
+
+        this.#btnShuffle.classList.toggle("active", enabled);
+        this.#btnShuffle.setAttribute("aria-pressed", String(enabled));
+    }
+
+    #updateRepeatButton() {
+        const enabled =
+            this.#player.queue.repeatMode !== "none" ||
+            this.#player.queueEndMode !== null;
+
+        this.#btnRepeat.classList.toggle("active", enabled);
+        this.#btnRepeat.setAttribute("aria-pressed", String(enabled));
+    }
+
+
+    #openRepeatMenu() {
+        const bounds = this.#btnRepeat.getBoundingClientRect();
+        const repeatMode = this.#player.queue.repeatMode;
+        const shuffle = this.#player.queue.shuffle;
+        const queueEndMode = this.#player.queueEndMode;
+
+        this.#repeatMenu.show({
+            clientX: bounds.left,
+            clientY: bounds.bottom
+        }, [
+            {
+                label: "Sin repetición",
+                icon: repeatMode === "none" && queueEndMode === null
+                    ? "✓"
+                    : "⏹",
+                action: () => this.#setPlaybackMode("none", false)
+            },
+            {
+                label: "Repetir cola",
+                icon: repeatMode === "queue" &&
+                    !shuffle
+                    ? "✓"
+                    : "🔁",
+                action: () => this.#setPlaybackMode("queue", false)
+            },
+            {
+                label: "Repetir + shuffle",
+                icon: repeatMode === "queue" && shuffle
+                    ? "✓"
+                    : "🔀",
+                action: () => this.#setPlaybackMode("queue", true)
+            },
+            {
+                label: "Generar lista al terminar",
+                icon: queueEndMode !== null ? "✓" : "▤",
+                children: [
+                    {
+                        label: "Grupo aleatorio",
+                        icon: queueEndMode === "artist" ? "✓" : "🎤",
+                        disabled: this.#library.artistCount === 0,
+                        action: () => this.#generateAfterQueue(
+                            "artist",
+                            () => this.#getRandomArtistTracks(),
+                            "grupo aleatorio"
+                        )
+                    },
+                    {
+                        label: "Disco aleatorio",
+                        icon: queueEndMode === "album" ? "✓" : "💿",
+                        disabled: this.#library.albumCount === 0,
+                        action: () => this.#generateAfterQueue(
+                            "album",
+                            () => this.#getRandomAlbumTracks(),
+                            "disco aleatorio"
+                        )
+                    },
+                    {
+                        label: "50 canciones aleatorias",
+                        icon: queueEndMode === "tracks50" ? "✓" : "🎵",
+                        disabled: this.#library.trackCount === 0,
+                        action: () => this.#generateAfterQueue(
+                            "tracks50",
+                            () => this.#getRandomTracks(),
+                            "50 canciones aleatorias"
+                        )
+                    }
+                ]
+            },
+            {
+                label: "Apagar reproductor",
+                icon: "⏻",
+                action: () => this.#closePlayer()
+            },
+            {
+                label: "Apagar Windows...",
+                icon: "🖥",
+                action: () => this.#scheduleWindowsShutdown()
+            }
+        ], document.getElementById("controls-trigger"));
+    }
+
+
+    #setPlaybackMode(repeatMode, shuffle) {
+        this.#settings.repeat = repeatMode !== "none";
+        this.#settings.shuffle = shuffle;
+        this.#player.setRepeatMode(repeatMode);
+        this.#player.setShuffle(shuffle);
+    }
+
+
+    #getRandomArtistTracks() {
+        const artist = this.#library.randomArtist();
+
+        return artist
+            ? this.#library.getArtistTracks(artist.id)
+            : [];
+    }
+
+
+    #getRandomAlbumTracks() {
+        const album = this.#library.randomAlbum();
+
+        return album
+            ? this.#library.getAlbumTracks(album.id)
+            : [];
+    }
+
+
+    #getRandomTracks() {
+        const tracks = [...this.#library.tracks];
+
+        for (let index = tracks.length - 1; index > 0; index--) {
+            const randomIndex = Math.floor(Math.random() * (index + 1));
+            [tracks[index], tracks[randomIndex]] =
+                [tracks[randomIndex], tracks[index]];
+        }
+
+        return tracks.slice(0, 50);
+    }
+
+
+    async #generateAfterQueue(mode, factory, description) {
+        try {
+            await this.#player.setQueueEndMode(mode, async () => {
+                const tracks = await factory();
+
+                if (tracks.length === 0) {
+                    throw new Error(
+                        `No hay canciones para generar: ${description}.`
+                    );
+                }
+
+                return tracks;
+            });
+        }
+        catch (error) {
+            console.error(
+                `No se pudo generar la lista de ${description}`,
+                error
+            );
+            window.alert(
+                `No se pudo generar la lista de ${description}: ${String(error)}`
+            );
+        }
+    }
+
+
+    async #closePlayer() {
+        try {
+            this.#player.stop();
+            await getCurrentWindow().close();
+        }
+        catch (error) {
+            console.error("No se pudo cerrar BubAudio", error);
+            window.alert("No se pudo cerrar BubAudio.");
+        }
+    }
+
+
+    async #scheduleWindowsShutdown() {
+        const confirmed = window.confirm(
+            "Windows se apagará en 60 segundos. Guarda tu trabajo antes de continuar."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            await invoke("schedule_windows_shutdown");
+            this.#player.stop();
+            window.alert(
+                "Apagado programado para dentro de 60 segundos. Para cancelarlo, ejecuta «shutdown /a»."
+            );
+        }
+        catch (error) {
+            console.error("No se pudo programar el apagado de Windows", error);
+            window.alert(
+                `No se pudo programar el apagado de Windows: ${String(error)}`
+            );
+        }
     }
 
 

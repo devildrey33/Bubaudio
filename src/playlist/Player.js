@@ -17,6 +17,9 @@ export default class Player extends EventTarget {
     #audioAnalyzer;
 
     #panelQueue;
+    #queueEndFactory = null;
+    #queueEndMode = null;
+    #queueFinished = false;
 
     constructor(audioAnalyzer) {
 
@@ -44,6 +47,10 @@ export default class Player extends EventTarget {
 
     get currentTrack() {
         return this.queue.currentTrack;
+    }
+
+    get queueEndMode() {
+        return this.#queueEndMode;
     }
 
 
@@ -75,8 +82,106 @@ export default class Player extends EventTarget {
      * Crea una cola nueva y comienza a reproducir.
      */
     async playQueue(tracks, startIndex = 0) {
+        const wasGeneratingAtEnd = this.#queueEndMode !== null;
+
+        this.#queueEndFactory = null;
+        this.#queueEndMode = null;
+        this.#queueFinished = false;
+
+        if (wasGeneratingAtEnd) {
+            this.dispatchEvent(new CustomEvent("repeatchange", {
+                detail: {
+                    repeatMode: this.queue.repeatMode,
+                    queueEndMode: null
+                }
+            }));
+        }
+
         this.queue.setTracks(tracks, startIndex);
+        this.dispatchEvent(new Event("queuechanged"));
         await this.playCurrent();
+    }
+
+    async setQueueEndMode(mode, factory) {
+        if (!["artist", "album", "tracks50"].includes(mode)) {
+            throw new RangeError(`Modo de generación no válido: ${mode}`);
+        }
+
+        if (typeof factory !== "function") {
+            throw new TypeError("Player: factory debe ser una función");
+        }
+
+        this.#queueEndMode = mode;
+        this.#queueEndFactory = factory;
+
+        this.dispatchEvent(new CustomEvent("repeatchange", {
+            detail: {
+                repeatMode: this.queue.repeatMode,
+                queueEndMode: mode
+            }
+        }));
+
+        if (this.queue.count === 0 || this.#queueFinished) {
+            await this.#playQueueEndFactory();
+        }
+    }
+
+    async #playQueueEndFactory() {
+        const factory = this.#queueEndFactory;
+        const mode = this.#queueEndMode;
+
+        if (!factory || !mode) {
+            return;
+        }
+
+        this.#queueFinished = false;
+        this.stop();
+        this.queue.clear();
+        this.dispatchEvent(new Event("queuechanged"));
+
+        let tracks;
+        try {
+            tracks = await factory();
+        }
+        catch (error) {
+            this.#clearQueueEndMode(mode, factory);
+            throw error;
+        }
+
+        if (!Array.isArray(tracks) || tracks.length === 0) {
+            this.#clearQueueEndMode(mode, factory);
+            this.#queueFinished = true;
+            throw new Error("La lista generada no contiene canciones.");
+        }
+
+        if (
+            this.#queueEndMode !== mode ||
+            this.#queueEndFactory !== factory
+        ) {
+            return;
+        }
+
+        this.queue.setTracks(tracks);
+        this.dispatchEvent(new Event("queuechanged"));
+        await this.playCurrent();
+    }
+
+    #clearQueueEndMode(mode, factory) {
+        if (
+            this.#queueEndMode !== mode ||
+            this.#queueEndFactory !== factory
+        ) {
+            return;
+        }
+
+        this.#queueEndMode = null;
+        this.#queueEndFactory = null;
+        this.dispatchEvent(new CustomEvent("repeatchange", {
+            detail: {
+                repeatMode: this.queue.repeatMode,
+                queueEndMode: null
+            }
+        }));
     }
 
 
@@ -125,6 +230,7 @@ export default class Player extends EventTarget {
         try {
 
             await this.audio.play();
+            this.#queueFinished = false;
 
             this.#emitStateChanged();
         }
@@ -164,11 +270,37 @@ export default class Player extends EventTarget {
     //==========================================================================
 
     async next() {
+
+        if (this.#queueEndFactory && this.queue.isAtEnd) {
+            try {
+                await this.#playQueueEndFactory();
+            }
+            catch (error) {
+                console.error("Player: no se pudo generar la lista pendiente", error);
+                this.dispatchEvent(new CustomEvent("queuegenerationerror", {
+                    detail: { error }
+                }));
+            }
+
+            return;
+        }
+
+        const repeatMode = this.queue.repeatMode;
+        if (this.#queueEndFactory && repeatMode === "track") {
+            this.queue.repeatMode = "none";
+        }
+
         const item = this.queue.next();
+
+        this.queue.repeatMode = repeatMode;
+
         if (!item) {
+            this.#queueFinished = true;
             this.stop();
             return;
         }
+
+        this.#queueFinished = false;
         await this.playCurrent();
     }
 
@@ -179,6 +311,7 @@ export default class Player extends EventTarget {
             return;
         }
 
+        this.#queueFinished = false;
         await this.playCurrent();
     }
 
@@ -254,12 +387,31 @@ export default class Player extends EventTarget {
     //==========================================================================
 
     setShuffle(enabled) {
+        enabled = Boolean(enabled);
+
         this.queue.setShuffle(enabled);
+        this.dispatchEvent(new CustomEvent("shufflechange", {
+            detail: {
+                shuffle: this.queue.shuffle
+            }
+        }));
     }
 
 
     setRepeatMode(mode) {
+        if (!["none", "track", "queue"].includes(mode)) {
+            throw new RangeError(`Modo de repetición no válido: ${mode}`);
+        }
+
+        this.#queueEndMode = null;
+        this.#queueEndFactory = null;
         this.queue.repeatMode = mode;
+        this.dispatchEvent(new CustomEvent("repeatchange", {
+            detail: {
+                repeatMode: mode,
+                queueEndMode: null
+            }
+        }));
     }
 
 
@@ -330,6 +482,9 @@ export default class Player extends EventTarget {
         if (!ok) {
             return false;
         }
+
+        this.#queueFinished = false;
+
         console.log(
             "currentIndex",
             this.queue.currentIndex

@@ -10,6 +10,28 @@ fn greet(name: &str) -> String {
     )
 }
 
+#[tauri::command]
+fn schedule_windows_shutdown() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("shutdown.exe")
+            .args(["/s", "/t", "60"])
+            .status()
+            .map_err(|error| format!("No se pudo ejecutar shutdown.exe: {error}"))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("shutdown.exe terminó con el estado {status}"))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("El apagado del sistema solo está disponible en Windows.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 
@@ -31,7 +53,8 @@ pub fn run() {
         )        
         .invoke_handler(
             tauri::generate_handler![
-                greet
+                greet,
+                schedule_windows_shutdown
             ]
         )
 

@@ -88,8 +88,8 @@
  * Mostrar controles
  ******************************************************************************/
 
-#controls-trigger:hover
-#player-controls {
+#controls-trigger:hover #player-controls,
+#controls-trigger.context-menu-open #player-controls {
 
     opacity: 1;
 
@@ -221,6 +221,26 @@
 
     transform:
         translateY(-2px);
+}
+
+.player-button.active {
+
+    background:
+        rgba(
+            61,
+            126,
+            255,
+            0.45
+        );
+
+    box-shadow:
+        0 0 12px
+        rgba(
+            61,
+            126,
+            255,
+            0.35
+        );
 }
 
 
