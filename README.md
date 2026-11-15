@@ -8,6 +8,16 @@ Actualmente el proyecto se encuentra en desarrollo activo.
 
 ---
 
+## Descarga
+
+- [Bubaudio 0.5.1 para Windows (x64)](http://devildrey33.es/Bubaudio/Bubaudio_0.5.1_x64_en-US.msi)
+
+---
+
+Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para desarrollar este reproductor.
+
+---
+
 ## Características
 
 ### Biblioteca musical
