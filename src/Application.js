@@ -5,6 +5,7 @@ import Visualizer           from "./rendering/Visualizer.js";
 
 import PlayerControls       from "./ui/PlayerControls.js";
 import QueuePanel           from "./ui/QueuePanel.js";
+import LibraryPanel         from "./ui/LibraryPanel.js";
 import NowPlayingTooltip    from "./ui/NowPlayingTooltip.js";
 
 import PlayerSettings       from "./settings/PlayerSettings.js";
@@ -96,6 +97,7 @@ export default class Application {
         );
 
         this.panelQueue = new QueuePanel();
+        this.panelLibrary = new LibraryPanel(this.library);
 
         this.nowPlayingTooltip= new NowPlayingTooltip();
 

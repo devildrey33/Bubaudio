@@ -1,0 +1,58 @@
+#library-tree {
+    color: #ddd;
+    font-size: 13px;
+}
+
+.library-node {
+    min-width: 0;
+}
+
+.library-row {
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.library-node > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.library-node > summary::-webkit-details-marker {
+    display: none;
+}
+
+.library-node > summary::before {
+    content: "▸";
+    width: 18px;
+    flex: 0 0 18px;
+    color: #888;
+}
+
+.library-node[open] > summary::before {
+    content: "▾";
+}
+
+.library-node > summary:hover,
+.library-track:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.library-children {
+    padding-left: 14px;
+}
+
+.library-track {
+    padding-left: 26px;
+    color: #aaa;
+}
+
+.library-empty {
+    padding: 12px 8px;
+    color: #888;
+}

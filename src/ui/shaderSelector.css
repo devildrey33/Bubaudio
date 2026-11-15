@@ -1,0 +1,33 @@
+#shader-trigger {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 33vh;
+    z-index: 99;
+}
+
+#shaderPanel {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0 0 14px 14px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    transform: translate(-50%, -120%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 250ms ease, transform 250ms ease;
+}
+
+#shader-trigger:hover #shaderPanel {
+    transform: translate(-50%, 0);
+    opacity: 1;
+    pointer-events: auto;
+}
