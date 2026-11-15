@@ -1,26 +1,26 @@
 import shaderData from "./shaders";
 
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow }     from "@tauri-apps/api/window";
 
-import AudioAnalyzer        from "./audio/AudioAnalyzer.js";
-import Visualizer           from "./rendering/Visualizer.js";
+import AudioAnalyzer            from "./audio/AudioAnalyzer.js";
+import Visualizer               from "./rendering/Visualizer.js";
 
-import PlayerControls       from "./ui/PlayerControls.js";
-import QueuePanel           from "./ui/QueuePanel2.js";
-import LibraryPanel         from "./ui/LibraryPanel.js";
-import AudioDebugPanel      from "./ui/AudioDebugPanel.js";
-import NowPlayingTooltip    from "./ui/NowPlayingTooltip.js";
-import RandomListTooltip    from "./ui/RandomListTooltip.js";
+import PlayerControls           from "./ui/PlayerControls.js";
+import QueuePanel               from "./ui/QueuePanel2.js";
+import LibraryPanel             from "./ui/LibraryPanel.js";
+import AudioDebugPanel          from "./ui/AudioDebugPanel.js";
+import NowPlayingTooltip        from "./ui/NowPlayingTooltip.js";
+import RandomListTooltip        from "./ui/RandomListTooltip.js";
 import LibraryScanProgressPanel from "./ui/LibraryScanProgressPanel.js";
-import OptionsPanel        from "./ui/OptionsPanel.js";
-import PanelResizeController from "./ui/PanelResizeController.js";
+import OptionsPanel             from "./ui/OptionsPanel.js";
+import PanelResizeController    from "./ui/PanelResizeController.js";
 
-import PlayerSettings       from "./settings/PlayerSettings.js";
+import PlayerSettings           from "./settings/PlayerSettings.js";
 
-import LibraryIndexer       from "./libraryindexer/LibraryIndexer.js";
+import LibraryIndexer           from "./libraryindexer/LibraryIndexer.js";
 
-import Player               from "./playlist/Player.js";
-import PlaylistStore        from "./playlist/PlaylistStore.js";
+import Player                   from "./playlist/Player.js";
+import PlaylistStore            from "./playlist/PlaylistStore.js";
 
 
 function sameMusicPaths(first, second) {

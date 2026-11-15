@@ -15,6 +15,9 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;      // expects a decaying envelope: 1.0 on hit -> 0.0
+uniform float uMidBeat;
+uniform float uTrebleBeat;
+
  
 // Audio textures (1D, values normalised to 0..1, read from .r)
 uniform sampler2D uSpectrum;
@@ -50,6 +53,8 @@ float a01 = fract(ang / TAU + 0.5);   // fract() keeps it in 0..1
 
 float t     = uTime;
 float beat  = clamp(uBeat, 0.0, 1.0);
+float midBeat = clamp(uMidBeat, 0.0, 1.0);
+float trebleBeat = clamp(uTrebleBeat, 0.0, 1.0);
 float pixel = 1.0 / uResolution.y;     // ~1px feather
 
 vec3 col = vec3(0.0);
@@ -61,7 +66,7 @@ bg          *= 0.7 + 0.6 * uVolume + 0.4 * beat;
 col         += bg;
 
 // ------------------------------------------------ 2. bass core
-float coreR    = 0.09 + 0.10 * uBass + 0.03 * beat;
+float coreR    = 0.09 + 0.10 * uBass + 0.03 * beat + 0.08 * trebleBeat;
 float coreGlow = exp(-max(r - coreR, 0.0) * 10.0);
 vec3  coreCol  = palette(0.15 + 0.35 * uTreble + t * 0.02);
 col += coreCol * coreGlow * (0.5 + 2.2 * uBass + 0.8 * beat);
@@ -109,6 +114,12 @@ float shockR = 0.12 + age * 1.05;                // expands outward
 float shockW = 0.02 + 0.06 * beat;
 float shock  = exp(-pow((r - shockR) / shockW, 2.0)) * beat;
 col += palette(0.75 + age * 0.5) * shock * 1.6;
+
+float midAge = 1.0 - midBeat;
+float midShockR = 0.12 + midAge * 1.05;
+float midShockW = 0.02 + 0.06 * midBeat;
+float midShock = exp(-pow((r - midShockR) / midShockW, 2.0)) * midBeat;
+col += vec3(0.05, 0.75, 1.0) * midShock * 1.6;
 
 // ------------------------------------------------ 6. post
 col *= 1.0 - 0.50 * smoothstep(0.45, 1.70, r);   // vignette

@@ -19,14 +19,14 @@ import freshquagga   from "./freshquagga.frag?raw";
 
 const shaders = [
     { name : "Plasma",       fragment : plasma       },
-    { name : "Barras3d",     fragment : barras3d      },
+    { name : "Barras3d",     fragment : barras3d     },
     { name : "Barras",       fragment : barras       },
     { name : "Living Orb",   fragment : livingorb    },
+    { name : "Living Orb 2", fragment : livingorb2   },
+    { name : "Living Orb 3", fragment : livingorb3   },
     { name : "Galaxy",       fragment : galaxy       },
     { name : "Dual Oscy",    fragment : dualoscy     },
     { name : "Liquid Orb",   fragment : liquidorb    },
-    { name : "Living Orb 2", fragment : livingorb2   },
-    { name : "Living Orb 3", fragment : livingorb3   },
     { name : "Dual Wave",    fragment : dualwaveform },
     { name : "DigitalOcean", fragment : digitalocean },
     { name : "Tunnel",       fragment : tunnel       },

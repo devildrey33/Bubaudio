@@ -11,6 +11,7 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;
+uniform float uMidBeat;
 uniform float uTrebleBeat;
 
 uniform sampler2D uSpectrum;
@@ -96,7 +97,7 @@ vec2 creatureMotion(float creatureId, float time, vec2 amplitude)
     float seed = creatureId + 1.0;
     float motionDuration = mix(
         5.0,
-        10.0,
+        15.0,
         hash(vec2(seed * 19.1, seed * 31.7))
     );
     float motionPhase = hash(vec2(seed * 47.3, seed * 11.9));
@@ -109,20 +110,6 @@ vec2 creatureMotion(float creatureId, float time, vec2 amplitude)
         randomMotionTarget(motionStep, creatureId, amplitude),
         transition
     );
-}
-
-vec2 creatureHome(float creatureId, float creatureGroup, float aspect)
-{
-    float localIndex = mod(creatureId, 8.0);
-    float column = mod(localIndex, 4.0);
-    float row = floor(localIndex / 4.0);
-    float laneStart = mix(-aspect, 0.0, creatureGroup);
-    float x = laneStart + (column + 0.5) * aspect * 0.25;
-    float y = mix(-0.28, 0.28, row);
-    float seed = creatureId + 1.0;
-    x += (hash(vec2(seed * 13.7, seed * 29.1)) - 0.5) * aspect * 0.08;
-    y += (hash(vec2(seed * 41.3, seed * 5.7)) - 0.5) * 0.08;
-    return vec2(x, y);
 }
 
 vec2 voronoi(vec2 p, float time)
@@ -168,6 +155,7 @@ vec4 renderEye(
     float bass,
     float treble,
     float bassBeat,
+    float midBeat,
     float trebleBeat,
     float time,
     vec3 scleraTint,
@@ -178,18 +166,20 @@ vec4 renderEye(
 {
     vec2 eyePosition = (facePosition - center) / eyeScale;
     float eyeDistance = length(eyePosition);
+    float eyeBeat = max(max(bassBeat, midBeat), trebleBeat);
     float socket = 1.0 - smoothstep(1.0, 1.18, eyeDistance);
     float eyeball = 1.0 - smoothstep(0.82, 0.94, eyeDistance);
 
     vec3 eyeColor = vec3(0.004, 0.008, 0.028);
     vec3 sclera = scleraTint
                 * (0.82 + max(eyePosition.y, 0.0) * 0.18)
-                * (1.0 + trebleBeat * 0.2);
+                * (1.0 + eyeBeat * 0.65);
     eyeColor = mix(eyeColor, sclera, eyeball);
 
     vec2 irisPosition = eyePosition - gaze;
     float irisDistance = length(irisPosition);
     float irisRadius = 0.37 + bass * 0.04 + bassBeat * 0.05
+                     + midBeat * 0.04
                      + trebleBeat * 0.035;
     float iris = 1.0 - smoothstep(
         irisRadius - 0.025,
@@ -203,7 +193,7 @@ vec4 renderEye(
         irisPrimary,
         irisSecondary,
         0.5 + 0.5 * sin(time * 0.5 + treble + trebleBeat * 0.8)
-    ) * irisRays * (1.0 + trebleBeat * 0.8);
+    ) * irisRays * (1.0 + eyeBeat);
     eyeColor = mix(eyeColor, irisColor, iris);
 
     float pupilRadius = 0.13 + bass * 0.10 + bassBeat * 0.12;
@@ -217,12 +207,14 @@ vec4 renderEye(
     vec2 glintPosition = irisPosition - vec2(-0.12, 0.14);
     float glint = exp(-dot(glintPosition, glintPosition) * 220.0);
     eyeColor += vec3(0.8, 0.96, 1.0) * glint * eyeball
-              * (1.0 + trebleBeat * 0.5);
+              * (1.0 + eyeBeat * 0.8);
+
+    eyeColor += irisPrimary * eyeBeat * 0.45 * eyeball * (1.0 - pupil);
 
     float eyeRim = smoothstep(0.78, 0.88, eyeDistance)
                  * (1.0 - smoothstep(0.94, 1.02, eyeDistance));
     eyeColor += eyeAccent * eyeRim
-              * (0.15 + treble * 0.25 + trebleBeat * 0.75);
+              * (0.15 + treble * 0.25 + eyeBeat * 1.1);
 
     return vec4(eyeColor, socket);
 }
@@ -249,6 +241,7 @@ void main()
     screenUv.x *= aspect;
     float screenRadius = length(screenUv);
     float beat = clamp(uBeat, 0.0, 1.0);
+    float midBeat = clamp(uMidBeat, 0.0, 1.0);
     float trebleBeat = clamp(uTrebleBeat, 0.0, 1.0);
 
     vec3 deepBlue = vec3(0.008, 0.015, 0.09);
@@ -264,7 +257,8 @@ void main()
 
     float audioEnergy = clamp(
         uBass * 0.35 + uMid * 0.2 + uTreble * 0.1
-        + uVolume * 0.25 + beat * 0.1 + trebleBeat * 0.1,
+        + uVolume * 0.25 + beat * 0.1 + midBeat * 0.1
+        + trebleBeat * 0.1,
         0.0,
         1.0
     );
@@ -281,7 +275,7 @@ void main()
     );
     vec3 patternColor = mix(cyan, pink, colorPhase);
     float patternGain = 0.45 + audioEnergy * 0.65
-                      + beat * 0.35 + trebleBeat * 0.3;
+                      + beat * 0.35 + midBeat * 0.32 + trebleBeat * 0.3;
     vec3 background = vec3(0.0015, 0.002, 0.006);
     background += patternColor
                 * (edgeCore * 0.42 + edgeGlow * 0.12 + cellCenters * 0.025)
@@ -290,52 +284,63 @@ void main()
     background += deepBlue * exp(-screenRadius * 1.3)
                 * (0.08 + uVolume * 0.1 + beat * 0.08);
 
-    // Render both independently so their identity and palette follow them
-    // across the screen, including when their silhouettes overlap.
     vec3 color = background;
-    for (int creatureIndex = 0; creatureIndex < 16; creatureIndex++)
+    vec3 creatureColorSum = vec3(0.0);
+    float creatureWeightSum = 0.0;
+    float remainingCreatureAlpha = 1.0;
+
+    for (int creatureIndex = 0; creatureIndex < 3; creatureIndex++)
     {
         float creatureId = float(creatureIndex);
-        float creatureGroup = floor(creatureId / 8.0);
-        vec3 creatureDeepBlue = mix(
-            deepBlue,
-            vec3(0.10, 0.012, 0.018),
-            creatureGroup
+        if (creatureIndex == 1)
+        {
+            creatureId = 2.0;
+        }
+        else if (creatureIndex == 2)
+        {
+            creatureId = 1.0;
+        }
+
+        float blueGroup = 1.0 - step(0.5, creatureId);
+        float redGroup = step(0.5, creatureId) * (1.0 - step(1.5, creatureId));
+        float greenGroup = step(1.5, creatureId);
+        vec3 creatureDeepBlue =
+            deepBlue * blueGroup +
+            vec3(0.10, 0.012, 0.018) * redGroup +
+            vec3(0.004, 0.07, 0.015) * greenGroup;
+        vec3 creatureBlue =
+            blue * blueGroup +
+            vec3(0.68, 0.10, 0.018) * redGroup +
+            vec3(0.015, 0.35, 0.045) * greenGroup;
+        vec3 creatureCyan =
+            cyan * blueGroup +
+            vec3(1.0, 0.34, 0.035) * redGroup +
+            vec3(0.10, 0.95, 0.18) * greenGroup;
+        vec3 creatureViolet =
+            violet * blueGroup +
+            vec3(0.92, 0.025, 0.30) * redGroup +
+            vec3(0.04, 0.7, 0.10) * greenGroup;
+        vec3 creaturePink =
+            pink * blueGroup +
+            vec3(1.0, 0.72, 0.08) * redGroup +
+            vec3(0.68, 0.95, 0.10) * greenGroup;
+        vec3 creatureWhite =
+            white * blueGroup +
+            vec3(1.0, 0.88, 0.62) * redGroup +
+            vec3(0.72, 1.0, 0.72) * greenGroup;
+        vec3 creatureSclera =
+            vec3(0.48, 0.72, 0.86) * blueGroup +
+            vec3(0.94, 0.70, 0.48) * redGroup +
+            vec3(0.52, 0.86, 0.56) * greenGroup;
+        float creatureBassBeat = beat * blueGroup;
+        float creatureMidBeat = midBeat * greenGroup;
+        float creatureTrebleBeat = trebleBeat * redGroup;
+        float creatureBeat = max(
+            max(creatureBassBeat, creatureMidBeat),
+            creatureTrebleBeat
         );
-        vec3 creatureBlue = mix(
-            blue,
-            vec3(0.68, 0.10, 0.018),
-            creatureGroup
-        );
-        vec3 creatureCyan = mix(
-            cyan,
-            vec3(1.0, 0.34, 0.035),
-            creatureGroup
-        );
-        vec3 creatureViolet = mix(
-            violet,
-            vec3(0.92, 0.025, 0.30),
-            creatureGroup
-        );
-        vec3 creaturePink = mix(
-            pink,
-            vec3(1.0, 0.72, 0.08),
-            creatureGroup
-        );
-        vec3 creatureWhite = mix(
-            white,
-            vec3(1.0, 0.88, 0.62),
-            creatureGroup
-        );
-        vec3 creatureSclera = mix(
-            vec3(0.48, 0.72, 0.86),
-            vec3(0.94, 0.70, 0.48),
-            creatureGroup
-        );
-        float creatureBassBeat = beat * (1.0 - creatureGroup);
-        float creatureTrebleBeat = trebleBeat * creatureGroup;
-        float creatureBeat = max(creatureBassBeat, creatureTrebleBeat);
-        float creatureBandLevel = mix(uBass, uTreble, creatureGroup);
+        float creatureBandLevel =
+            uBass * blueGroup + uTreble * redGroup + uMid * greenGroup;
         float sizeResponse = smoothstep(
             0.015,
             0.45,
@@ -343,31 +348,42 @@ void main()
         );
         const float CREATURE_EXTENT = 1.08;
         float maximumCreatureScale = min(
-            0.40,
+            0.65,
             aspect * 0.5 / CREATURE_EXTENT
         );
-        float creatureScale = min(
-            maximumCreatureScale * 1.07,
+        float creatureScale = 1.25 * min(
+            maximumCreatureScale * 1.22,
             maximumCreatureScale * (
-                0.82 + sizeResponse * 0.18 + creatureBeat * 0.07
+                0.82 + sizeResponse * 0.18 + creatureBeat * 0.22
             )
         );
+        float laneCenterX = (redGroup - blueGroup) * aspect * 0.5;
         vec2 movement = creatureMotion(
             creatureId,
             uTime,
             vec2(aspect * 0.65, 0.38)
         );
-        vec2 creatureCenter =
-            creatureHome(creatureId, creatureGroup, aspect) + movement;
 
-        if (length(screenUv - creatureCenter) >
-            creatureScale * CREATURE_EXTENT)
+        float creatureExtent = creatureScale * CREATURE_EXTENT;
+        vec2 screenLimit = max(
+            vec2(aspect, 1.0) - vec2(creatureExtent + 0.04),
+            vec2(0.0)
+        );
+        vec2 creatureCenter = clamp(
+            vec2(laneCenterX, 0.16) + movement,
+            -screenLimit,
+            screenLimit
+        );
+        float maxCenterRadius = max(1.8 - creatureExtent - 0.04, 0.0);
+        float centerRadius = length(creatureCenter);
+        if (centerRadius > maxCenterRadius)
         {
-            continue;
+            creatureCenter *= maxCenterRadius / centerRadius;
         }
 
         vec2 uv = (
-            screenUv - creatureCenter
+            screenUv -
+            creatureCenter
         ) / creatureScale;
         t = uTime + creatureId * 1.73;
 
@@ -613,14 +629,17 @@ void main()
             0.30 / max(length(gazeOffset), 0.001)
         );
 
+        vec2 eyeCenter = vec2(0.0, 0.02);
+        vec2 eyeScale = vec2(0.64, 0.50);
         vec4 eye = renderEye(
             facePosition,
-            vec2(0.0, 0.02),
-            vec2(0.64, 0.50),
+            eyeCenter,
+            eyeScale,
             gaze,
             uBass,
             uTreble,
             creatureBassBeat,
+            creatureMidBeat,
             creatureTrebleBeat,
             t,
             creatureSclera,
@@ -680,8 +699,25 @@ void main()
             0.0,
             1.0
         );
-        color = creatureColor + color * (1.0 - creatureAlpha);
+        creatureColorSum += creatureColor * creatureAlpha;
+        creatureWeightSum += creatureAlpha;
+        remainingCreatureAlpha *= 1.0 - creatureAlpha;
     }
+
+    float overlapWhiteness = smoothstep(1.0, 3.0, creatureWeightSum);
+    float fusionBloom = smoothstep(0.9, 2.8, creatureWeightSum);
+    vec3 averageCreatureColor =
+        creatureColorSum / max(creatureWeightSum, 0.001);
+    vec3 additiveCreatureColor =
+        averageCreatureColor * max(creatureWeightSum, 1.0);
+    vec3 mergedCreatureColor = mix(
+        additiveCreatureColor,
+        vec3(1.0),
+        overlapWhiteness
+    );
+    color = mergedCreatureColor
+          + background * remainingCreatureAlpha;
+    color += vec3(1.0) * fusionBloom * 3.5;
 
     // General volume
     color *= 0.65 + uVolume * 1.4;
