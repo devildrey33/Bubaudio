@@ -130,6 +130,9 @@ Actualmente BubAudio detecta:
 ## Capturas
 
 ![Bubaudio1](docs/Bubaudio1.png)
+![lista](docs/Bubaudio2.png)
+![controles](docs/Bubaudio3.png)
+![base de datos](docs/Bubaudio4.png)
 
 ---
 
