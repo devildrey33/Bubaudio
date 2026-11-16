@@ -17,6 +17,14 @@ import {
 }
 from "@tauri-apps/plugin-fs";
 
+/**
+ * Normaliza una ruta para comparaciones: convierte separadores a formato
+ * Windows, elimina separadores finales y compara sin distinguir mayúsculas.
+ * No modifica la ruta almacenada ni valida que el archivo exista.
+ *
+ * @param {*} path Ruta que se desea normalizar.
+ * @returns {string} Representación normalizada para comparar rutas.
+ */
 function normalizeTrackPath(path) {
     return String(path ?? "")
         .replace(/[\\/]/g, "\\")
@@ -24,13 +32,24 @@ function normalizeTrackPath(path) {
         .toLowerCase();
 }
 
+/**
+ * Recorre directorios de música, construye índices de artistas, álbumes y
+ * pistas, y los persiste en el área de datos de la aplicación. También ofrece
+ * consultas sobre esos índices y permite actualizar el estado favorito de una
+ * pista.
+ *
+ * Los objetos obtenidos mediante los getters de colección son referencias
+ * internas; las modificaciones del índice deben realizarse preferentemente a
+ * través de los métodos de esta clase para mantener coherentes el archivo y
+ * los eventos emitidos.
+ */
 export default class LibraryIndexer extends EventTarget {
 
-    // Nombre y versión del índice.
+    // Archivo persistido en AppData y versión del esquema que escribe save().
     static LIBRARY_FILE = "library.json";
     static INDEX_VERSION = 4;
 
-    // Formatos de audio soportados.
+    // Extensiones reconocidas durante el escaneo, sin el punto inicial.
     static SUPPORTED_FORMATS = [
         "mp3",
         "flac",
@@ -42,10 +61,10 @@ export default class LibraryIndexer extends EventTarget {
     ];
 
 
-    // Directorios raíz de la biblioteca.
+    // Directorios raíz que se procesaron en el escaneo/carga más reciente.
     #musicPaths = [];
 
-    // Índices internos.
+    // Colecciones que forman el índice en memoria.
     #artists = [];
 
     #albums = [];
@@ -54,7 +73,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Constructor.
+     * Inicializa el EventTarget. El índice empieza vacío y se llena mediante
+     * scan() o load().
      */
     constructor() {
         super();
@@ -62,19 +82,26 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Escanea una biblioteca musical.
+     * Escanea una o varias raíces de música y reconstruye el índice.
      *
-     * Estructura esperada:
+     * Para cada raíz, interpreta su primer nivel como artistas; recorre
+     * recursivamente sus subdirectorios y considera cada carpeta que contiene
+     * archivos de audio directamente como un álbum. Las carpetas de
+     * organización sin pistas propias no se añaden como álbumes.
      *
-     * musicPaths[]/
-     * └── Grupo/
-     *     └── [carpetas de organización/]...
-     *         └── Disco/
-     *             └── canciones
+     * Antes de limpiar el índice conserva los favoritos por ruta normalizada,
+     * para restaurarlos en las pistas que vuelvan a encontrarse. Emite
+     * scanstart, eventos scanprogress durante el recorrido y, al finalizar,
+     * guarda el índice y emite scancomplete. Si ocurre un error, emite
+     * scanerror y vuelve a propagarlo.
      *
-     * @param {String|Array<String>} musicPaths
+     * @param {string|Array<string>} musicPaths Una raíz o varias raíces.
+     * @returns {Promise<void>}
+     * @throws {Error} Si no hay raíces válidas o falla el acceso/escritura.
      */
     async scan(musicPaths) {
+        // Acepta una sola ruta o una lista; descarta valores que no sean
+        // cadenas no vacías después de recortar espacios.
         this.#musicPaths = (Array.isArray(musicPaths)
             ? musicPaths
             : [musicPaths]
@@ -84,6 +111,8 @@ export default class LibraryIndexer extends EventTarget {
             throw new Error("LibraryIndexer: no hay directorios de música");
         }
 
+        // Los IDs se regeneran en cada escaneo, así que la ruta es la clave
+        // estable para conservar los favoritos entre reconstrucciones.
         const favoritesByPath = new Map(
             this.#tracks
                 .filter(track => track.favorite === true)
@@ -91,6 +120,8 @@ export default class LibraryIndexer extends EventTarget {
         );
 
         this.clear();
+        // Notifica el comienzo después de reiniciar las colecciones para que
+        // los observadores lean el nuevo estado vacío.
         this.dispatchEvent(new CustomEvent("scanstart", {
             detail: {
                 musicPaths: [...this.#musicPaths]
@@ -102,6 +133,8 @@ export default class LibraryIndexer extends EventTarget {
                 await this.#scanArtists(musicPath);
             }
 
+            // Una nueva pista no conserva el favorito por su ID; recupera el
+            // valor usando la ruta del archivo o queda como no favorita.
             for (const track of this.#tracks) {
                 track.favorite = favoritesByPath.get(
                     normalizeTrackPath(track.path)
@@ -129,7 +162,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Elimina todo el contenido indexado.
+     * Vacía artistas, álbumes y pistas en memoria. No modifica las raíces
+     * configuradas y no escribe el cambio en disco.
      */
     clear() {
         this.#artists = [];
@@ -139,9 +173,10 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Escaneo del primer nivel.
+     * Lee el primer nivel de una raíz y procesa cada subdirectorio como artista.
      *
-     * Cada carpeta representa un grupo.
+     * Solo incorpora el artista al índice si el recorrido encuentra al menos
+     * un álbum con pistas. Emite progreso para la raíz y para cada artista.
      */
     async #scanArtists(musicPath) {
         const artists = await readDir(musicPath);
@@ -168,6 +203,8 @@ export default class LibraryIndexer extends EventTarget {
             );
 
             const albumCount = this.#albums.length;
+            // El artista temporal se pasa a la recursión para asociar sus
+            // álbumes y pistas; solo se publica en #artists si tiene álbumes.
             await this.#scanAlbums(
                 artistData
             );
@@ -180,11 +217,12 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Escaneo recursivo de las carpetas del artista.
+     * Desciende por las carpetas bajo un artista e inicia el procesamiento de
+     * cada subdirectorio. La recursión real continúa en #scanAlbumDirectory,
+     * que también detecta pistas directamente dentro de cada carpeta.
      *
-     * Cada carpeta que contiene canciones directamente representa un disco.
-     *
-     * @param {Object} artist
+     * @param {object} artist Datos del artista al que se asociarán los álbumes.
+     * @private
      */
     async #scanAlbums(artist) {
 
@@ -206,15 +244,17 @@ export default class LibraryIndexer extends EventTarget {
     }
 
     /**
-     * Indexa las canciones directas de cada carpeta como un disco
-     * independiente y sigue buscando discos en sus subdirectorios.
+     * Procesa una carpeta como posible álbum y luego visita sus subdirectorios.
+     * Los archivos de audio directos se asignan al álbum cuyo título es el
+     * nombre de esa carpeta; los subdirectorios se consideran posibles álbumes
+     * independientes. Solo añade el álbum si contiene al menos una pista.
      *
-     * @param {Object} artist
-     * @param {String} currentPath
-     * @param {String} albumTitle
+     * @param {object} artist Datos del artista asociado.
+     * @param {string} currentPath Ruta de la carpeta actual.
+     * @param {string} albumTitle Título inferido del nombre de la carpeta.
+     * @private
      */
     async #scanAlbumDirectory(artist, currentPath, albumTitle) {
-
         this.#reportProgress(
             currentPath,
             artist.name,
@@ -235,6 +275,8 @@ export default class LibraryIndexer extends EventTarget {
             const entryPath = `${currentPath}\\${entry.name}`;
 
             if (entry.isDirectory) {
+                // Aunque la carpeta actual tenga pistas, sus subdirectorios se
+                // indexan por separado y no se mezclan en este álbum.
                 await this.#scanAlbumDirectory(
                     artist,
                     entryPath,
@@ -247,6 +289,8 @@ export default class LibraryIndexer extends EventTarget {
                 continue;
             }
 
+            // Cada pista queda en el índice global; el álbum guarda además
+            // sus IDs para consultas posteriores.
             const track = this.#createTrack(
                 artist,
                 album,
@@ -258,12 +302,23 @@ export default class LibraryIndexer extends EventTarget {
             this.addTrack(track);
         }
 
+        // Evita representar como álbum una carpeta de organización vacía o que
+        // solo contiene subcarpetas.
         if (album.tracks.length > 0) {
             this.addAlbum(album);
         }
     }
 
 
+    /**
+     * Emite el progreso actual del escaneo con rutas y contadores acumulados.
+     * Los contadores reflejan únicamente los elementos ya agregados al índice.
+     *
+     * @param {string} currentPath Carpeta que se está procesando.
+     * @param {string} artistName Nombre del artista actual, si se conoce.
+     * @param {string} musicPath Raíz de biblioteca correspondiente.
+     * @private
+     */
     #reportProgress(currentPath, artistName, musicPath) {
         this.dispatchEvent(new CustomEvent("scanprogress", {
             detail: {
@@ -279,46 +334,50 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Construye una pista a partir de un fichero.
+     * Construye el objeto de pista usando la jerarquía de carpetas y el nombre
+     * del archivo. Por ahora no lee metadatos embebidos: el título se obtiene
+     * del nombre sin su última extensión, el género queda sin asignar y el
+     * formato es la extensión en minúsculas.
      *
-     * @param {Object} artist
-     * @param {Object} album
-     * @param {Object} file
+     * @param {object} artist Artista al que pertenece la pista.
+     * @param {object} album Álbum al que pertenece la pista.
+     * @param {object} file Entrada devuelta por readDir.
+     * @param {string} path Ruta completa del archivo.
      *
-     * @returns {Object}
+     * @returns {object} Registro listo para añadir al índice.
      */
     #createTrack(artist, album, file, path) {
         const extension = file.name.split(".").pop()?.toLowerCase();
         const title = file.name.replace(/\.[^.]+$/, "");
 
         return {
-            // Identificador único.
+            // El ID identifica esta instancia en el índice; puede cambiar en
+            // un escaneo posterior, a diferencia de la ruta del archivo.
             id      : crypto.randomUUID(),
             artistId: artist.id,
-            // Datos obtenidos de la estructura
-            // de directorios.
+            // Estos valores se infieren de los nombres de las carpetas.
             artist  : artist.name,
             album   : album.title,
-            // De momento usamos el nombre
-            // del fichero.
+            // El nombre del archivo es el título mientras no se lean tags.
             title,
-            // Futuro soporte para tags.
+            // Reservado para metadatos que puedan leerse en el futuro.
             genre   : null,
-            // Ruta completa.
+            // Ruta absoluta que usa el reproductor para abrir el archivo.
             path,
+            // Se restaura en scan() si coincide la ruta de un favorito previo.
             favorite: false,
-            // Formato detectado.
+            // Extensión detectada a partir del nombre.
             format  : extension
         };
     }
 
 
     /**
-     * Comprueba si un fichero contiene
-     * un formato soportado.
+     * Comprueba si la última extensión del nombre está incluida en la lista de
+     * formatos admitidos. La comparación no distingue mayúsculas.
      *
-     * @param {String} fileName
-     * @returns {Boolean}
+     * @param {string} fileName Nombre del archivo.
+     * @returns {boolean} true si la extensión está soportada.
      */
     #isSupportedFile(fileName) {
         const extension = fileName.split(".").pop()?.toLowerCase();
@@ -327,9 +386,10 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Añade un grupo.
+     * Añade un artista a la colección en memoria. No valida ni persiste el
+     * objeto; el escaneo construye los datos y save() los guarda.
      *
-     * @param {Object} artist
+     * @param {object} artist Registro del artista.
      */
     addArtist(artist) {
         this.#artists.push(
@@ -339,9 +399,9 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Añade un disco.
+     * Añade un álbum a la colección en memoria.
      *
-     * @param {Object} album
+     * @param {object} album Registro del álbum.
      */
     addAlbum(album) {
         this.#albums.push(
@@ -351,9 +411,9 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Añade una canción.
+     * Añade una pista a la colección en memoria.
      *
-     * @param {Object} track
+     * @param {object} track Registro de la pista.
      */
     addTrack(track) {
         this.#tracks.push(track);
@@ -361,7 +421,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Devuelve un grupo aleatorio.
+     * Devuelve un artista elegido con probabilidad uniforme, o null si el índice
+     * no contiene artistas.
      */
     randomArtist() {
         if (this.#artists.length === 0) {
@@ -375,7 +436,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Devuelve un disco aleatorio.
+     * Devuelve un álbum elegido con probabilidad uniforme, o null si no hay
+     * álbumes indexados.
      */
     randomAlbum() {
 
@@ -395,7 +457,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Devuelve una canción aleatoria.
+     * Devuelve una pista elegida con probabilidad uniforme, o null si el índice
+     * no contiene pistas.
      */
     randomTrack() {
 
@@ -413,7 +476,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Lista de grupos.
+     * Devuelve la colección interna de artistas. Es una referencia mutable,
+     * no una copia.
      */
     get artists() {
         return this.#artists;
@@ -421,7 +485,8 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Lista de discos.
+     * Devuelve la colección interna de álbumes. Es una referencia mutable,
+     * no una copia.
      */
     get albums() {
         return this.#albums;
@@ -429,19 +494,21 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Lista de canciones.
+     * Devuelve la colección interna de pistas. Es una referencia mutable,
+     * no una copia.
      */
     get tracks() {
         return this.#tracks;
     }
 
+    /** Devuelve una copia superficial de las rutas raíz configuradas. */
     get musicPaths() {
         return [...this.#musicPaths];
     }
 
 
     /**
-     * Número de grupos indexados.
+     * Número de artistas almacenados.
      */
     get artistCount() {
         return this.#artists.length;
@@ -449,7 +516,7 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Número de discos indexados.
+     * Número de álbumes almacenados.
      */
     get albumCount() {
         return this.#albums.length;
@@ -457,7 +524,7 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Número de canciones indexadas.
+     * Número de pistas almacenadas.
      */
     get trackCount() {
         return this.#tracks.length;
@@ -465,9 +532,15 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Guarda la biblioteca indexada en AppData.
+     * Serializa el estado actual en library.json dentro de AppData. El
+     * documento incluye versión de esquema, raíces de escaneo, fecha y las
+     * tres colecciones. Crea AppData si aún no existe.
+     *
+     * @returns {Promise<void>}
      */
     async save() {
+        // scanDate se actualiza en cada escritura, no solo al escanear; por
+        // tanto también refleja cambios de favoritos.
         const library = {
             version     : LibraryIndexer.INDEX_VERSION,
             musicPaths  : this.#musicPaths,
@@ -492,11 +565,28 @@ export default class LibraryIndexer extends EventTarget {
     }
 
 
+    /**
+     * Indica si una pista está marcada como favorita. Acepta el objeto/ID de
+     * una pista o su ruta; si no se encuentra en el índice, devuelve false.
+     *
+     * @param {object|string} trackOrId Pista, ID o ruta que se consultará.
+     * @returns {boolean} true solo si la pista encontrada tiene favorite=true.
+     */
     isFavorite(trackOrId) {
         return this.#findTrack(trackOrId)?.favorite === true;
     }
 
-
+    /**
+     * Cambia el estado favorito y persiste el índice. Rechaza valores que no
+     * sean booleanos y pistas no encontradas. Si save() falla, restaura en
+     * memoria el valor anterior y propaga el error. Emite favoritechange solo
+     * después de guardar correctamente y solo cuando el valor realmente cambió.
+     *
+     * @param {object|string} trackOrId Pista, ID o ruta a actualizar.
+     * @param {boolean} favorite Nuevo estado favorito.
+     * @returns {Promise<boolean>} true si se modificó; false si ya tenía ese
+     * estado.
+     */
     async setFavorite(trackOrId, favorite) {
         if (typeof favorite !== "boolean") {
             throw new TypeError(
@@ -516,6 +606,7 @@ export default class LibraryIndexer extends EventTarget {
             return false;
         }
 
+        // Actualización optimista local con reversión si la persistencia falla.
         track.favorite = favorite;
         try {
             await this.save();
@@ -536,7 +627,17 @@ export default class LibraryIndexer extends EventTarget {
     }
 
 
+    /**
+     * Resuelve una pista aceptando su ID, una ruta o un objeto que contenga id
+     * y/o path. Prioriza el ID; si no encuentra coincidencia, compara rutas
+     * normalizadas para admitir diferencias de mayúsculas o separadores.
+     *
+     * @param {object|string} trackOrId Valor usado para identificar la pista.
+     * @returns {object|null} Registro interno encontrado o null.
+     * @private
+     */
     #findTrack(trackOrId) {
+        // Primero intenta el ID estable dentro de la biblioteca cargada.
         const id = typeof trackOrId === "string"
             ? trackOrId
             : trackOrId?.id;
@@ -548,6 +649,8 @@ export default class LibraryIndexer extends EventTarget {
             return track;
         }
 
+        // Una cadena también se interpreta como posible ruta; un objeto puede
+        // proporcionar path aunque su ID no exista en el índice actual.
         const path = typeof trackOrId === "string"
             ? trackOrId
             : trackOrId?.path;
@@ -563,10 +666,24 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Carga la biblioteca desde AppData.
+     * Lee y analiza library.json desde AppData, reconstruye las colecciones y
+     * aplica compatibilidad con esquemas antiguos. Versiones anteriores a 3
+     * requieren volver a escanear las raíces guardadas; esquemas anteriores a
+     * la versión actual migran el campo favorite. También filtra álbumes sin
+     * pistas presentes y artistas que no tengan álbumes asociados.
+     *
+     * Si la migración o la limpieza cambia el índice, lo guarda en el formato
+     * actual antes de retornar el documento originalmente leído.
+     *
+     * @returns {Promise<object>} Documento JSON leído antes de una eventual
+     * migración/persistencia.
+     * @throws {Error} Si falla la lectura/análisis o no se pueden reconstruir
+     * los datos de un índice antiguo.
      */
     async load() {
 
+        // Los fallos de lectura y JSON se propagan para que el llamador pueda
+        // decidir cómo informar o recuperarse.
         const json = await readTextFile(
             LibraryIndexer.LIBRARY_FILE, {
                 baseDir : BaseDirectory.AppData
@@ -575,6 +692,8 @@ export default class LibraryIndexer extends EventTarget {
 
         const library = JSON.parse(json);
 
+        // Admite el formato histórico singular musicPath además de la lista
+        // actual musicPaths.
         this.#musicPaths = Array.isArray(library.musicPaths)
             ? library.musicPaths
             : library.musicPath
@@ -588,10 +707,14 @@ export default class LibraryIndexer extends EventTarget {
                 );
             }
 
+            // El esquema antiguo no proporciona un índice suficientemente
+            // actualizado, por lo que se reconstruye desde los archivos.
             await this.scan(this.#musicPaths);
             return library;
         }
 
+        // Normaliza el campo favorite de registros que carezcan de él o tengan
+        // un valor distinto de true.
         const storedTracks = Array.isArray(library.tracks)
             ? library.tracks
             : [];
@@ -605,6 +728,8 @@ export default class LibraryIndexer extends EventTarget {
             favorite: track.favorite === true
         }));
 
+        // Elimina álbumes cuyo listado de pistas no enlaza con ninguna pista
+        // cargada; evita mantener entidades huérfanas en el índice.
         const artists = library.artists ?? [];
         const albums = library.albums ?? [];
         const trackIds = new Set(this.#tracks.map(track => track.id));
@@ -614,6 +739,9 @@ export default class LibraryIndexer extends EventTarget {
             album.tracks.some(trackId => trackIds.has(trackId))
         );
 
+        // Reconstruye artistas usados por los álbumes conservados. La
+        // comparación por nombre permite compatibilidad con registros sin
+        // artistId.
         const artistIds = new Set(
             this.#albums
                 .map(album => album.artistId)
@@ -629,6 +757,8 @@ export default class LibraryIndexer extends EventTarget {
                 : artistNames.has(artist.name)
         );
 
+        // Persistir si hubo limpieza de referencias o migración de esquema/
+        // favoritos garantiza que la siguiente carga use el formato vigente.
         if (
             this.#albums.length !== albums.length ||
             this.#artists.length !== artists.length ||
@@ -642,10 +772,12 @@ export default class LibraryIndexer extends EventTarget {
 
         
     /**
-     * Devuelve todas las canciones de un disco.
+     * Devuelve las pistas cuyos IDs están enumerados por el álbum solicitado.
+     * Si no existe el álbum, retorna una lista vacía. El orden corresponde al
+     * de #tracks, no necesariamente al orden de los IDs dentro del álbum.
      *
-     * @param {String} albumId
-     * @returns {Array}
+     * @param {string} albumId ID del álbum.
+     * @returns {Array} Pistas asociadas.
      */
     getAlbumTracks(albumId) {
         const album = this.#albums.find(
@@ -661,10 +793,11 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Devuelve todas las canciones de un artista.
+     * Devuelve las pistas del artista. Usa artistId cuando la pista lo tiene;
+     * para datos antiguos sin ese campo, recurre al nombre del artista.
      *
-     * @param {String} artistId
-     * @returns {Array}
+     * @param {string} artistId ID del artista.
+     * @returns {Array} Pistas asociadas o una lista vacía si no existe.
      */
     getArtistTracks(artistId) {
 
@@ -685,10 +818,11 @@ export default class LibraryIndexer extends EventTarget {
 
 
     /**
-     * Devuelve todos los álbumes de un artista.
+     * Devuelve los álbumes del artista. Usa artistId cuando está disponible y
+     * compara el nombre como alternativa para registros antiguos.
      *
-     * @param {String} artistId
-     * @returns {Array}
+     * @param {string} artistId ID del artista.
+     * @returns {Array} Álbumes asociados o una lista vacía si no existe.
      */
     getArtistAlbums(artistId) {
 

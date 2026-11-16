@@ -12,6 +12,7 @@ export default class LibraryPanel {
     #playlistStore;
     #contextMenu;
     #directoryTrackIndex = new Map();
+    #favoriteControlsByTrackId = new Map();
 
     constructor(
         library,
@@ -43,9 +44,9 @@ export default class LibraryPanel {
             }
         );
 
-        this.#library.addEventListener("favoritechange", () => {
-            this.#refreshFavoriteDisplays();
-        });
+        this.#library.addEventListener("favoritechange", event =>
+            this.#refreshFavoriteDisplays(event)
+        );
 
         this.render();
     }
@@ -53,6 +54,7 @@ export default class LibraryPanel {
 
     render() {
 
+        this.#favoriteControlsByTrackId.clear();
         this.#buildDirectoryTrackIndex();
         this.#container.replaceChildren();
         this.#container.appendChild(this.#createPlaylistsNode());
@@ -332,6 +334,10 @@ export default class LibraryPanel {
         button.addEventListener("dblclick", event => {
             event.stopPropagation();
         });
+        this.#favoriteControlsByTrackId.set(track.id, {
+            button,
+            track
+        });
         return button;
     }
 
@@ -392,6 +398,18 @@ export default class LibraryPanel {
         const favoriteCount = tracks.filter(track =>
             this.#library.isFavorite(track)
         ).length;
+
+        this.#setFavoriteIndicatorCount(
+            indicator,
+            favoriteCount,
+            total
+        );
+    }
+
+
+    #setFavoriteIndicatorCount(indicator, favoriteCount, total) {
+        indicator.dataset.favoriteCount = String(favoriteCount);
+        indicator.dataset.trackCount = String(total);
         const ratio = total > 0 ? favoriteCount / total : 0;
         const opacity = 0.2 + ratio * 0.8;
         const description =
@@ -403,41 +421,29 @@ export default class LibraryPanel {
     }
 
 
-    #refreshFavoriteDisplays() {
-        for (const button of this.#container.querySelectorAll(
-            ".library-favorite-toggle"
-        )) {
-            const track = this.#findLibraryItem(
-                "track",
-                button.dataset.libraryId
-            );
-            if (track) {
-                this.#updateFavoriteButton(button, track);
-            }
+    #refreshFavoriteDisplays(event) {
+        const { trackId, favorite } = event.detail;
+        const control = this.#favoriteControlsByTrackId.get(trackId);
+        if (!control) {
+            return;
         }
 
-        for (const indicator of this.#container.querySelectorAll(
-            ".library-favorite-indicator"
-        )) {
-            const node = indicator.closest(".library-node");
-            const type = node?.dataset.libraryType;
-            const id = node?.dataset.libraryId;
-            let tracks = [];
-            if (type === "directory") {
-                tracks = this.#getDirectoryTracks(id);
-            }
-            else if (type === "album") {
-                tracks = this.#getDirectoryTracks(
-                    node.dataset.libraryDirectory
+        this.#updateFavoriteButton(control.button, control.track);
+        const favoriteCountDelta = favorite ? 1 : -1;
+        let node = control.button.closest(".library-node");
+        while (node) {
+            const indicator = node.firstElementChild?.querySelector(
+                ".library-favorite-indicator"
+            );
+            if (indicator) {
+                this.#setFavoriteIndicatorCount(
+                    indicator,
+                    Number(indicator.dataset.favoriteCount) +
+                        favoriteCountDelta,
+                    Number(indicator.dataset.trackCount)
                 );
             }
-            else {
-                const item = this.#findLibraryItem(type, id);
-                if (item) {
-                    tracks = this.#getNodeTracks(type, item);
-                }
-            }
-            this.#updateFavoriteIndicator(indicator, tracks);
+            node = node.parentElement?.closest(".library-node") ?? null;
         }
     }
 

@@ -24,7 +24,8 @@ import { readFile } from "@tauri-apps/plugin-fs";
  */
 export default class AudioAnalyzer {
 
-    // Límites en Hz de las bandas usadas para los medidores y los pulsos.
+    // Límites inclusivos en Hz de las bandas usadas para medidores y pulsos.
+    // Se convierten a índices de FFT usando la frecuencia de muestreo actual.
     static BASS_MIN = 20;
     static BASS_MAX = 250;
 
@@ -34,8 +35,9 @@ export default class AudioAnalyzer {
     static TREBLE_MIN = 4000;
     static TREBLE_MAX = 16000;
 
-    // Peso de la muestra nueva al actualizar los niveles expuestos.
-    // Un valor mayor reacciona más rápido, pero también deja pasar más variación.
+    // Peso de la muestra nueva al actualizar los niveles públicos. Corresponde
+    // a un suavizado exponencial: valores mayores responden más rápido, pero
+    // dejan pasar más variación entre frames.
     static SMOOTHING = 0.2;
 
     // El detector mantiene una referencia lenta del nivel habitual de cada banda.
@@ -116,8 +118,12 @@ export default class AudioAnalyzer {
     /**
      * Crea el grafo de reproducción y los buffers del analizador.
      *
-     * @param {Number} fftSize Tamaño de la FFT. Web Audio requiere un valor
-     * válido admitido por AnalyserNode; por defecto se usan 2048 muestras.
+     * La fuente se conecta al AnalyserNode y este a la salida de audio, de modo
+     * que el análisis no interrumpe la reproducción. El tamaño determina la
+     * resolución de frecuencia y temporal del análisis; debe cumplir los
+     * valores permitidos por AnalyserNode.
+     *
+     * @param {number} fftSize Tamaño de la FFT; por defecto, 2048 muestras.
      */
     constructor(fftSize = 2048) {
 
@@ -152,9 +158,14 @@ export default class AudioAnalyzer {
      * liberar sus recursos.
      *
      * La extensión se usa para asignar el MIME type que espera el navegador;
-     * si no se reconoce, se conserva audio/mpeg como valor predeterminado.
+     * si no se reconoce (incluido mp3), se conserva audio/mpeg como valor
+     * predeterminado. La asignación de src y la llamada a load() inician la
+     * carga multimedia, pero no esperan a que los metadatos estén disponibles
+     * ni comienzan la reproducción.
      *
-     * @param {String} path Ruta absoluta del archivo de audio.
+     * @param {string} path Ruta del archivo de audio que Tauri puede leer.
+     * @returns {Promise<void>} Se resuelve al leer el archivo y configurar la
+     * URL del elemento; no espera el evento canplay.
      */
     async load(path) {
 
@@ -231,7 +242,10 @@ export default class AudioAnalyzer {
      * Inicia o reanuda la reproducción del archivo cargado.
      *
      * Se devuelve la Promise de HTMLMediaElement.play() para que el llamador
-     * pueda esperar el inicio o gestionar errores del navegador.
+     * pueda esperar el inicio o gestionar errores del navegador, por ejemplo
+     * cuando el navegador bloquea la reproducción automática.
+     *
+     * @returns {Promise<void>} Promesa nativa de inicio de reproducción.
      */
     play() {
         return this.#audioElement.play();
@@ -240,6 +254,7 @@ export default class AudioAnalyzer {
 
     /**
      * Pausa el elemento de audio sin reiniciar su posición.
+     * Para detenerlo y volver al comienzo se usa stop().
      */
     pause() {
         this.#audioElement.pause();
@@ -250,6 +265,9 @@ export default class AudioAnalyzer {
      * Reactiva el contexto de Web Audio si el sistema o el navegador lo
      * dejaron suspendido. Esto es independiente de iniciar la pista:
      * play() controla el elemento y este método el grafo de análisis/salida.
+     * Si el contexto ya está activo, no realiza ninguna operación.
+     *
+     * @returns {Promise<void>}
      */
     async resume() {
         if (this.#audioContext && this.#audioContext.state === "suspended") {
@@ -265,6 +283,7 @@ export default class AudioAnalyzer {
      * actualiza los buffers de frecuencia y forma de onda, luego suaviza los
      * niveles para su presentación y, por separado, compara las bandas sin
      * suavizar con una referencia lenta para encontrar transitorios.
+     * No agenda el siguiente frame: el bucle visualizador debe invocarlo.
      */
     update() {
 
@@ -399,6 +418,7 @@ export default class AudioAnalyzer {
      * El resultado se normaliza al rango 0-1 a partir de los bytes de
      * getByteFrequencyData. Incluye todos los bins, no es una medición
      * calibrada en sonoridad ni un porcentaje de potencia acústica.
+     * Si los bytes son todos cero, el resultado también es cero.
      */
     #computeVolume() {
         let total = 0;
@@ -417,10 +437,12 @@ export default class AudioAnalyzer {
      * frecuencia de muestreo) y del tamaño del buffer. El límite superior es
      * inclusivo. Se promedian los bytes y se dividen entre 255 para devolver
      * un valor entre 0 y 1 comparable entre bandas.
+     * Los rangos solicitados deben corresponder a bins existentes en el
+     * analizador; este método no limita índices fuera del buffer.
      *
-     * @param {Number} minFreq Frecuencia inferior en Hz.
-     * @param {Number} maxFreq Frecuencia superior en Hz.
-     * @returns {Number} Media de la banda normalizada.
+     * @param {number} minFreq Frecuencia inferior en Hz.
+     * @param {number} maxFreq Frecuencia superior en Hz.
+     * @returns {number} Media de la banda normalizada.
      */
     #averageBand(minFreq, maxFreq) {
         const nyquist = this.#audioContext.sampleRate * 0.5;
@@ -497,6 +519,11 @@ export default class AudioAnalyzer {
 
     /**
      * Libera los recursos del analizador y la URL del Blob.
+     *
+     * Pausa el elemento, revoca la URL temporal y cierra AudioContext. Después
+     * de destruir la instancia, debe crearse otra para volver a usar el grafo.
+     *
+     * @returns {Promise<void>}
      */
     async destroy() {
         this.pause();
@@ -517,6 +544,8 @@ export default class AudioAnalyzer {
 
     /**
      * Detiene la reproducción y devuelve la posición de la pista al inicio.
+     * No descarga el origen ni libera la URL temporal, por lo que la pista
+     * puede volver a reproducirse sin volver a leer el archivo.
      */
     stop() {
         if (!this.#audioElement) {
@@ -554,6 +583,10 @@ export default class AudioAnalyzer {
 
     /**
      * Ajusta el volumen de salida y limita el valor al rango admitido.
+     * El cambio afecta al elemento de audio, no a las muestras normalizadas
+     * que ya se obtuvieron en buffers previos del analizador.
+     *
+     * @param {number} value Volumen solicitado; se limita a 0-1.
      */
     set volumeLevel(value) {
         this.#audioElement.volume = Math.min(1, Math.max(0, value));
@@ -562,6 +595,10 @@ export default class AudioAnalyzer {
 
     /**
      * Busca una posición de la pista, expresada en segundos.
+     * La validez de la posición depende de los metadatos y del medio cargado;
+     * el elemento HTMLAudioElement gestiona el ajuste/error correspondiente.
+     *
+     * @param {number} seconds Posición solicitada en segundos.
      */
     seek(seconds) {
         if (!this.#audioElement) {
@@ -573,11 +610,16 @@ export default class AudioAnalyzer {
 
     /**
      * Indica si el elemento está reproduciendo en este momento.
+     * Devuelve true si está reproduciendo y false si está pausado.
      */
     get isPlaying() {
         return (this.#audioElement && !this.#audioElement.paused);
     }    
 
+    /**
+     * Expone el HTMLAudioElement para que Player pueda consultar su estado y
+     * conectar sus propios manejadores de eventos.
+     */
     get audioElement() {
         return this.#audioElement;
     }    
