@@ -43,7 +43,7 @@ export default class Visualizer {
     // Malla de pantalla completa añadida a la escena.
     #mesh;
 
-    // Textura 1D (representada como 1024x1) con datos del espectro.
+    // Textura 1D (representada como (fftSize / 2)x1) con datos del espectro.
     #fftTexture;
 
     // Textura 1D con muestras de la forma de onda temporal.
@@ -116,19 +116,20 @@ export default class Visualizer {
 
 
     /**
-     * Crea texturas de una fila con un canal rojo de 8 bits. Se reservan 1024
+     * Crea texturas de una fila con un canal rojo de 8 bits. Se reservan (fftSize / 2) 
      * texeles; en cada frame #animate copia las muestras disponibles, hasta
-     * un máximo de 1024.
+     * un máximo de (fftSize / 2).
      *
      * @private
      */
     #createTextures() {
+        const Tam = this.#audio.fftSize * 0.5;
 
         // DataTexture conserva un buffer CPU que puede actualizarse sin crear
         // una textura nueva en cada frame.
         this.#waveformTexture = new THREE.DataTexture(
-            new Uint8Array(1024),
-            1024,
+            new Uint8Array(Tam),
+            Tam,
             1,
             THREE.RedFormat
         );
@@ -136,8 +137,8 @@ export default class Visualizer {
         this.#waveformTexture.needsUpdate = true;
 
         this.#fftTexture = new THREE.DataTexture(
-            new Uint8Array(1024),
-            1024,
+            new Uint8Array(Tam),
+            Tam,
             1,
             THREE.RedFormat
         );
@@ -296,7 +297,7 @@ export default class Visualizer {
 
 
     /**
-     * Actualiza una muestra del AudioAnalyzer, copia hasta 1024 bytes de cada
+     * Actualiza una muestra del AudioAnalyzer, copia hasta (fftSize / 2) bytes de cada
      * buffer al contenido de las texturas, actualiza tiempo/frame/niveles y
      * dibuja la escena. Al final solicita el siguiente frame, manteniendo el
      * bucle activo.
@@ -309,14 +310,16 @@ export default class Visualizer {
      */
     #animate(time) {
 
-        // AudioAnalyzer reutiliza sus TypedArrays; se copian sus primeras 1024
+        // AudioAnalyzer reutiliza sus TypedArrays; se copian sus primeras (fftSize / 2)
         // muestras a buffers persistentes de DataTexture antes de subirlos a GPU.
         this.#audio.update();
+
+        const Tam = this.#audio.fftSize * 0.5;
 
         this.#waveformTexture.image.data.set(
             this.#audio.waveform.subarray(
                 0,
-                1024
+                Tam
             )
         );
 
@@ -325,7 +328,7 @@ export default class Visualizer {
         this.#fftTexture.image.data.set(
             this.#audio.spectrum.subarray(
                 0,
-                1024
+                Tam
             )
         );
 

@@ -123,9 +123,9 @@ export default class AudioAnalyzer {
      * resolución de frecuencia y temporal del análisis; debe cumplir los
      * valores permitidos por AnalyserNode.
      *
-     * @param {number} fftSize Tamaño de la FFT; por defecto, 2048 muestras.
+     * @param {number} fftSize Tamaño de la FFT; por defecto, 4096 muestras.
      */
-    constructor(fftSize = 2048) {
+    constructor(fftSize = 4096) {
 
         this.#fftSize = fftSize;
 
@@ -623,4 +623,9 @@ export default class AudioAnalyzer {
     get audioElement() {
         return this.#audioElement;
     }    
+
+
+    get fftSize() {
+        return this.#fftSize;
+    }
 }

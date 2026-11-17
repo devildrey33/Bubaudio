@@ -3,17 +3,45 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import ContextMenu from "./ContextMenu.js";
 
 
+/**
+ * Construye el árbol visual de artistas, carpetas, álbumes y canciones, y
+ * conecta sus acciones con la biblioteca, el reproductor y las listas
+ * guardadas. También conserva los índices que permiten actualizar con rapidez
+ * las pistas y los indicadores de favoritos cuando cambia una canción.
+ */
 export default class LibraryPanel {
 
+    // Elemento raíz donde se dibuja todo el árbol de biblioteca.
     #container;
+
+    // Servicios que aportan los datos y ejecutan acciones solicitadas desde UI.
     #library;
     #player;
     #queuePanel;
     #playlistStore;
+
+    // Menú contextual compartido por artistas, carpetas, álbumes y listas.
     #contextMenu;
+
+    // Índice normalizado de carpeta -> pistas contenidas en esa carpeta y sus
+    // descendientes. Se reconstruye cada vez que se renderiza el árbol.
     #directoryTrackIndex = new Map();
+
+    // Índice de ID de pista -> control y modelo. Evita buscar la pista en toda
+    // la biblioteca al actualizar una estrella individual.
     #favoriteControlsByTrackId = new Map();
 
+    /**
+     * Inicializa las dependencias, comprueba el contenedor, enlaza el menú
+     * contextual y escucha cambios de favoritos antes del primer renderizado.
+     *
+     * @param {LibraryIndexer} library Índice de artistas, álbumes y pistas.
+     * @param {Player} player Reproductor cuyas colas modifica el panel.
+     * @param {QueuePanel} queuePanel Vista de cola que se debe refrescar.
+     * @param {PlaylistStore} playlistStore Listas persistidas disponibles.
+     * @param {string} [containerId="library-tree"] ID del contenedor del árbol.
+     * @throws {Error} Si no existe el contenedor solicitado en el documento.
+     */
     constructor(
         library,
         player,
@@ -52,6 +80,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Reconstruye el árbol completo usando el estado actual de la biblioteca.
+     * Antes de crear los nodos reinicia el mapa de botones y el índice de rutas
+     * para que los eventos posteriores apunten a los elementos recién creados.
+     * Las listas guardadas se muestran incluso cuando la biblioteca no contiene
+     * artistas.
+     */
     render() {
 
         this.#favoriteControlsByTrackId.clear();
@@ -81,6 +116,12 @@ export default class LibraryPanel {
         }
     }
 
+    /**
+     * Crea el nodo desplegable de listas guardadas, ordena las listas por nombre
+     * y añade selección por clic y reproducción por doble clic o teclado.
+     *
+     * @returns {HTMLDetailsElement} Nodo completo de listas guardadas.
+     */
     #createPlaylistsNode() {
         const node = document.createElement("details");
         node.className = "library-node library-playlists";
@@ -153,6 +194,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Crea la sección desplegable de un artista. Su indicador resume los
+     * favoritos de todas sus pistas y sus hijos se organizan según las rutas
+     * de los álbumes.
+     *
+     * @param {object} artist Registro del artista del índice.
+     * @returns {HTMLDetailsElement} Nodo del artista con sus álbumes y carpetas.
+     */
     #createArtistNode(artist) {
 
         const artistNode = document.createElement("details");
@@ -178,6 +227,17 @@ export default class LibraryPanel {
         return artistNode;
     }
 
+    /**
+     * Construye una estructura de carpetas intermedia a partir de las rutas de
+     * los álbumes del artista. Cada segmento de ruta se convierte en un nodo;
+     * el nodo terminal conserva el álbum que se dibujará en esa ubicación.
+     *
+     * Si una ruta de álbum no está dentro de la ruta del artista, usa el título
+     * del álbum como ubicación relativa para mantenerlo visible en el árbol.
+     *
+     * @param {object} artist Artista cuyos álbumes se agruparán.
+     * @returns {object} Raíz con path y un Map de carpetas hijas.
+     */
     #createAlbumTree(artist) {
         const root = {
             path: artist.path,
@@ -219,6 +279,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Ordena los hijos directos de una carpeta y los convierte en nodos de
+     * carpeta o álbum según tengan asociado un álbum terminal.
+     *
+     * @param {HTMLElement} container Elemento al que se anexarán los hijos.
+     * @param {object} directory Carpeta del árbol intermedio.
+     */
     #appendDirectoryChildren(container, directory) {
         const children = [...directory.children.values()].sort((a, b) =>
             a.name.localeCompare(b.name, "es", {
@@ -237,6 +304,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Crea una carpeta organizativa sin álbum propio. Su indicador resume las
+     * canciones de esa ruta y todas las subcarpetas; después añade sus hijos.
+     *
+     * @param {object} directory Carpeta del árbol intermedio.
+     * @returns {HTMLDetailsElement} Nodo desplegable de carpeta.
+     */
     #createFolderNode(directory) {
         const folderNode = document.createElement("details");
         folderNode.className = "library-node library-folder";
@@ -261,6 +335,16 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Crea un álbum y sus pistas ordenadas por título. Si la carpeta del álbum
+     * contiene otros álbumes anidados, también los coloca dentro de este nodo.
+     * El indicador usa la carpeta completa, por lo que incluye las pistas de
+     * los descendientes cuando los haya.
+     *
+     * @param {object} album Álbum del índice.
+     * @param {object|null} directory Carpeta terminal asociada al álbum.
+     * @returns {HTMLDetailsElement} Nodo desplegable del álbum.
+     */
     #createAlbumNode(album, directory) {
 
         const albumNode = document.createElement("details");
@@ -306,6 +390,13 @@ export default class LibraryPanel {
         return albumNode;
     }
 
+    /**
+     * Añade a una fila su icono decorativo y su etiqueta textual.
+     *
+     * @param {HTMLElement} row Fila que recibirá los elementos.
+     * @param {string} iconText Contenido del icono.
+     * @param {string} labelText Texto visible de la fila.
+     */
     #appendRowContent(row, iconText, labelText) {
         const icon = document.createElement("span");
         icon.className = "library-icon";
@@ -320,6 +411,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Crea el botón de favorito de una pista, enlaza sus eventos y registra la
+     * relación botón/modelo por ID. Ese mapa permite actualizar solo esta
+     * estrella cuando llega un evento favoritechange.
+     *
+     * @param {object} track Pista asociada al control.
+     * @returns {HTMLButtonElement} Botón accesible de favorito.
+     */
     #createFavoriteButton(track) {
         const button = document.createElement("button");
         button.className = "library-favorite-toggle";
@@ -342,6 +441,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Refleja el estado favorito en el texto y los atributos accesibles del
+     * botón, incluido aria-pressed, su etiqueta y su ayuda emergente.
+     *
+     * @param {HTMLButtonElement} button Botón que se actualizará.
+     * @param {object} track Pista cuyo estado se representa.
+     */
     #updateFavoriteButton(button, track) {
         const favorite = this.#library.isFavorite(track);
         button.textContent = "★";
@@ -358,6 +464,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Ejecuta el cambio solicitado por el usuario. Deshabilita temporalmente el
+     * botón, informa de los fallos de persistencia y siempre restablece su
+     * estado visual al terminar la operación.
+     *
+     * @param {object} track Pista que cambiará de estado.
+     * @param {HTMLButtonElement} button Botón desde el que se inició la acción.
+     */
     async #toggleFavorite(track, button) {
         button.disabled = true;
         try {
@@ -382,6 +496,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Crea el indicador de favoritos que aparece junto al nombre de un artista,
+     * carpeta o álbum, y calcula su estado inicial a partir de sus pistas.
+     *
+     * @param {HTMLElement} row Fila que recibirá el indicador.
+     * @param {object[]} tracks Pistas que representa esa fila.
+     */
     #appendFavoriteIndicator(row, tracks) {
         const indicator = document.createElement("span");
         indicator.className = "library-favorite-indicator";
@@ -393,6 +514,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Calcula el total inicial de favoritos del grupo. Se usa al renderizar;
+     * los cambios siguientes ajustan ese total incrementalmente.
+     *
+     * @param {HTMLSpanElement} indicator Indicador que se actualizará.
+     * @param {object[]} tracks Pistas incluidas en el grupo.
+     */
     #updateFavoriteIndicator(indicator, tracks) {
         const total = tracks.length;
         const favoriteCount = tracks.filter(track =>
@@ -407,6 +535,15 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Guarda el total y el número de favoritos en data-* para poder aplicar
+     * deltas sin volver a recorrer las pistas. También actualiza opacidad,
+     * tooltip y etiqueta accesible del indicador.
+     *
+     * @param {HTMLSpanElement} indicator Indicador que se actualizará.
+     * @param {number} favoriteCount Número actual de pistas favoritas.
+     * @param {number} total Número total de pistas del grupo.
+     */
     #setFavoriteIndicatorCount(indicator, favoriteCount, total) {
         indicator.dataset.favoriteCount = String(favoriteCount);
         indicator.dataset.trackCount = String(total);
@@ -421,6 +558,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Aplica un evento favoritechange sin recorrer toda la biblioteca: actualiza
+     * el botón de la pista y suma o resta uno en los indicadores de sus nodos
+     * antecesores (carpeta, álbum y artista). El delta es válido porque el
+     * índice solo emite este evento cuando el favorito realmente cambia.
+     *
+     * @param {CustomEvent} event Evento con trackId y el estado favorito nuevo.
+     */
     #refreshFavoriteDisplays(event) {
         const { trackId, favorite } = event.detail;
         const control = this.#favoriteControlsByTrackId.get(trackId);
@@ -448,6 +593,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Genera las acciones del menú contextual para el elemento bajo el puntero.
+     * Las listas tienen acciones propias; artistas, carpetas y álbumes reciben
+     * opciones para añadir sus pistas a la cola y revelar su ruta en el sistema.
+     *
+     * @param {MouseEvent} event Evento que identifica la fila seleccionada.
+     * @returns {object[]} Acciones compatibles con ContextMenu.
+     */
     #getContextMenuItems(event) {
 
         const node = event.target instanceof Element
@@ -519,6 +672,13 @@ export default class LibraryPanel {
         ];
     }
 
+    /**
+     * Devuelve una copia de las pistas indexadas para una carpeta normalizada.
+     * La copia evita que consumidores como los menús modifiquen el array interno.
+     *
+     * @param {string} path Ruta de la carpeta.
+     * @returns {object[]} Pistas de esa carpeta y sus descendientes.
+     */
     #getDirectoryTracks(path) {
         const directoryPath = String(path)
             .replace(/[\\/]/g, "\\")
@@ -528,6 +688,12 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Construye el índice de rutas usado por los indicadores y acciones de
+     * carpetas. Cada pista se agrega a su carpeta directa y a cada antecesora,
+     * así cualquier carpeta puede consultar también el contenido descendiente.
+     * Las rutas se normalizan para no distinguir mayúsculas ni separadores.
+     */
     #buildDirectoryTrackIndex() {
         this.#directoryTrackIndex.clear();
 
@@ -565,6 +731,15 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Busca un artista, álbum o pista por ID en la colección correspondiente.
+     * Los directorios no forman parte de esas colecciones y se resuelven a partir
+     * de su ruta en los métodos que los consumen.
+     *
+     * @param {"artist"|"album"|"track"} type Tipo de elemento.
+     * @param {string} id Identificador del elemento.
+     * @returns {object|null} Elemento encontrado o null.
+     */
     #findLibraryItem(type, id) {
 
         const items = {
@@ -577,6 +752,14 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Obtiene las pistas representadas por un nodo: una pista, las pistas de un
+     * álbum o todas las pistas de los álbumes de un artista.
+     *
+     * @param {"artist"|"album"|"track"} type Tipo del nodo.
+     * @param {object} item Registro del nodo.
+     * @returns {object[]} Pistas asociadas, ordenadas por título cuando procede.
+     */
     #getNodeTracks(type, item) {
 
         if (type === "track") {
@@ -606,6 +789,13 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Ordena un array de pistas por título en español, ignorando mayúsculas y
+     * comparando partes numéricas. El array recibido se ordena in situ.
+     *
+     * @param {object[]} tracks Pistas que se ordenarán.
+     * @returns {object[]} El mismo array, ya ordenado.
+     */
     #sortTracks(tracks) {
         return tracks.sort((a, b) =>
             a.title.localeCompare(b.title, "es", {
@@ -616,6 +806,12 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Añade pistas a la cola actual o la inicializa si está vacía; luego
+     * sincroniza el panel de cola y notifica el cambio al resto de la aplicación.
+     *
+     * @param {object[]} tracks Pistas que se añadirán.
+     */
     #addTracksToQueue(tracks) {
 
         const queue = this.#player.queue;
@@ -632,6 +828,12 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Reemplaza la cola e inicia su reproducción. Si falla el inicio, registra
+     * el error; en ambos casos vuelve a sincronizar el panel con la cola actual.
+     *
+     * @param {object[]} tracks Pistas de la nueva cola.
+     */
     async #replaceQueue(tracks) {
         try {
             await this.#player.playQueue(tracks);
@@ -646,6 +848,12 @@ export default class LibraryPanel {
         this.#refreshQueuePanel(this.#player.queue);
     }
 
+    /**
+     * Reproduce todas las pistas de una lista guardada mediante el reproductor.
+     * Los fallos se registran y se presentan al usuario.
+     *
+     * @param {object} playlist Lista guardada que se reproducirá.
+     */
     async #playPlaylist(playlist) {
         try {
             await this.#player.playQueue(playlist.tracks);
@@ -661,6 +869,12 @@ export default class LibraryPanel {
         }
     }
 
+    /**
+     * Solicita confirmación antes de borrar una lista, la elimina del almacén y
+     * vuelve a renderizar el panel. Si falla, conserva la vista y muestra el error.
+     *
+     * @param {object} playlist Lista que se quiere eliminar.
+     */
     async #removePlaylist(playlist) {
         if (!window.confirm(`¿Eliminar la lista '${playlist.name}'?`)) {
             return;
@@ -682,6 +896,12 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Copia la cola actual al panel y, si hay una pista seleccionada, la marca
+     * como pista actual.
+     *
+     * @param {PlaybackQueue} queue Cola vigente del reproductor.
+     */
     #refreshQueuePanel(queue) {
 
         this.#queuePanel.setQueue(queue);
@@ -692,6 +912,12 @@ export default class LibraryPanel {
     }
 
 
+    /**
+     * Pide al sistema operativo que muestre la carpeta de una pista, álbum o
+     * artista. Los errores se registran para facilitar el diagnóstico.
+     *
+     * @param {string} path Ruta que se mostrará en el explorador.
+     */
     async #showFolder(path) {
         try {
             await revealItemInDir(path);
@@ -704,6 +930,10 @@ export default class LibraryPanel {
         }
     }
 
+    /**
+     * Actualiza el panel completo después de cambios estructurales, por ejemplo
+     * al crear o eliminar una lista guardada.
+     */
     refresh() {
         this.render();
     }

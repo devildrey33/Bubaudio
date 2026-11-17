@@ -14,6 +14,7 @@ import dualwaveform  from "./dualwaveform.frag?raw";
 import digitalocean  from "./digitalocean.frag?raw";
 import krustyrobots  from "./krustyrobots.frag?raw";
 import freshquagga   from "./freshquagga.frag?raw";
+import neuralsynapse   from "./neuralsynapse.frag?raw";
 
 
 
@@ -32,6 +33,7 @@ const shaders = [
     { name : "Tunnel",       fragment : tunnel       },
     { name : "krustyrobots", fragment : krustyrobots },
     { name : "freshquagga",  fragment : freshquagga  },
+    { name : "neuralsynapse",  fragment : neuralsynapse  },
 ];
 
 export default {

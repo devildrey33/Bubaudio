@@ -1,3 +1,7 @@
+/* #queue-trigger: 
+   - Un elemento fijo que se ubica en la parte superior derecha de la pantalla.
+   - Se utiliza para activar el panel de cola.
+*/
 #queue-trigger {
     position: fixed;
     top: 0;
@@ -7,6 +11,11 @@
     height: 100vh;
 }
 
+/* #queue-panel:
+   - El panel principal de la cola.
+   - Tiene una posición fija, está a la derecha inicialmente fuera de vista y se mueve hacia la derecha cuando se activa.
+   - Utiliza colores y efectos visuales como sombras y transiciones para mejorar la experiencia del usuario.
+*/
 #queue-panel {
     --queue-accent: #79b8ff;
     --queue-current: #ffc574;
@@ -26,12 +35,21 @@
     transition: right 0.25s ease;
 }
 
+/* #queue-trigger:hover #queue-panel, 
+   #queue-panel:hover,
+   #queue-panel.context-menu-open:
+   - Estados que mueven el panel de cola hacia la derecha cuando se activa.
+*/
 #queue-trigger:hover #queue-panel,
 #queue-panel:hover,
 #queue-panel.context-menu-open {
     right: 0;
 }
 
+/* #queue-panel > .panel-header:
+   - El encabezado del panel de cola.
+   - Incluye un icono musical y botones de guardar y generar (si están presentes en la interfaz).
+*/
 #queue-panel > .panel-header {
     height: 48px;
     min-height: 48px;
@@ -49,6 +67,9 @@
     letter-spacing: 0.02em;
 }
 
+/* #queue-panel > .panel-header::before:
+   - Icono musical en el encabezado del panel de cola.
+*/
 #queue-panel > .panel-header::before {
     content: "♫";
     width: 28px;
@@ -62,10 +83,17 @@
     font-size: 18px;
 }
 
+/* #queue-panel > .panel-header > span:
+   - Título del panel de cola.
+*/
 #queue-panel > .panel-header > span {
     flex: 1;
 }
 
+/* #queue-save-button,
+   #queue-generate-button:
+   - Botones de guardar y generar en el encabezado del panel de cola.
+*/
 #queue-save-button,
 #queue-generate-button {
     width: 30px;
@@ -83,6 +111,10 @@
     transition: background-color 120ms ease, border-color 120ms ease;
 }
 
+/* #queue-save-button:hover,
+   #queue-generate-button:hover:
+   - Estados de hover para los botones de guardar y generar.
+*/
 #queue-save-button:hover,
 #queue-save-button:focus-visible,
 #queue-generate-button:hover,
@@ -92,11 +124,18 @@
     background: rgba(77, 163, 255, 0.18);
 }
 
+/* #queue-save-button:disabled:
+   - Estado deshabilitado para el botón de guardar.
+*/
 #queue-save-button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
 
+/* #queue-list:
+   - La lista de elementos de la cola.
+   - Permite el desplazamiento vertical con barras de desplazamiento personalizadas.
+*/
 #queue-list {
     flex: 1;
     min-height: 0;
@@ -106,14 +145,23 @@
     scrollbar-width: auto;
 }
 
+/* #queue-list::-webkit-scrollbar:
+   - Estilos para la barra de desplazamiento en navegadores que utilizan WebKit.
+*/
 #queue-list::-webkit-scrollbar {
     width: 16px;
 }
 
+/* #queue-list::-webkit-scrollbar-track:
+   - Rastro de la barra de desplazamiento (área sin el thumb).
+*/
 #queue-list::-webkit-scrollbar-track {
     background: transparent;
 }
 
+/* #queue-list::-webkit-scrollbar-thumb:
+   - Thumb de la barra de desplazamiento.
+*/
 #queue-list::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 8px;
@@ -121,11 +169,18 @@
     background-clip: padding-box;
 }
 
+/* #queue-list::-webkit-scrollbar-thumb:hover:
+   - Estado de hover para el thumb de la barra de desplazamiento.
+*/
 #queue-list::-webkit-scrollbar-thumb:hover {
     background: #65768b;
     background-clip: padding-box;
 }
 
+/* .queue-item:
+   - Cada elemento individual en la lista de la cola.
+   - Tiene estilos para estados como hover, active, y selected.
+*/
 .queue-item {
     display: flex;
     align-items: center;
@@ -143,11 +198,17 @@
         transform 120ms ease;
 }
 
+/* .queue-item:hover:
+   - Estado de hover para los elementos de la cola.
+*/
 .queue-item:hover {
     background: rgba(255, 255, 255, 0.07);
     transform: translateX(-2px);
 }
 
+/* .queue-item.active:
+   - Elemento activo en la cola (generalmente el elemento actual).
+*/
 .queue-item.active {
     border-color: rgba(255, 191, 105, 0.75);
     border-left: 4px solid var(--queue-current);
@@ -159,25 +220,40 @@
     );
 }
 
+/* .queue-item.selected:
+   - Elemento seleccionado en la cola.
+*/
 .queue-item.selected {
     border-color: rgba(121, 184, 255, 0.68);
     background: rgba(77, 163, 255, 0.2);
 }
 
+/* .queue-item.selected .queue-index:
+   - Índice de los elementos seleccionados.
+*/
 .queue-item.selected .queue-index {
     color: #d8ebff;
     background: rgba(77, 163, 255, 0.38);
 }
 
+/* .queue-item.selected .queue-title:
+   - Título de los elementos seleccionados.
+*/
 .queue-item.selected .queue-title {
     color: #a9d2ff;
 }
 
+/* #queue-list:focus .queue-item.focused:
+   - Elementos focificados en la lista de la cola.
+*/
 #queue-list:focus .queue-item.focused {
     outline: 1px solid rgba(121, 184, 255, 0.75);
     outline-offset: -2px;
 }
 
+/* .queue-item.active.selected:
+   - Elemento activo y seleccionado en la cola.
+*/
 .queue-item.active.selected {
     border-left-color: var(--queue-current);
     background: linear-gradient(
@@ -187,32 +263,53 @@
     );
 }
 
+/* .queue-item.active.selected .queue-index:
+   - Índice de los elementos activos y seleccionados.
+*/
 .queue-item.active.selected .queue-index {
     color: #38230b;
     background: #ffc574;
     box-shadow: inset 0 0 0 1px rgba(77, 163, 255, 0.8);
 }
 
+/* .queue-item:active:
+   - Estado de activación (grabbing) para los elementos de la cola.
+*/
 .queue-item:active {
     cursor: grabbing;
 }
 
+/* #queue-list.is-dragging .queue-item:
+   - Estados durante el arrastrar y soltar en la lista de la cola.
+*/
 #queue-list.is-dragging .queue-item {
     transition: none;
 }
 
+/* #queue-list.is-dragging .queue-item.dragging:
+   - Elementos que se están arrastrando.
+*/
 #queue-list.is-dragging .queue-item.dragging {
     opacity: 0.45;
 }
 
+/* .queue-item.drop-before:
+   - Elemento antes de un área de soltar.
+*/
 .queue-item.drop-before {
     box-shadow: inset 0 3px 0 var(--queue-accent);
 }
 
+/* .queue-item.drop-after:
+   - Elemento después de un área de soltar.
+*/
 .queue-item.drop-after {
     box-shadow: inset 0 -3px 0 var(--queue-accent);
 }
 
+/* #queue-list.drop-at-end::after:
+   - Indicador en el final de la lista de elementos arrastrados.
+*/
 #queue-list.drop-at-end::after {
     content: "";
     display: block;
@@ -222,6 +319,9 @@
     background: var(--queue-accent);
 }
 
+/* .queue-index:
+   - Índice de cada elemento en la cola.
+*/
 .queue-index {
     width: 28px;
     height: 28px;
@@ -235,17 +335,26 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* .queue-item.active .queue-index:
+   - Índice de los elementos activos.
+*/
 .queue-item.active .queue-index {
     color: #38230b;
     background: var(--queue-current);
 }
 
+/* .queue-main:
+   - Contenido principal de cada elemento en la cola.
+*/
 .queue-main {
     min-width: 0;
     flex: 1;
     overflow: hidden;
 }
 
+/* .queue-favorite-toggle:
+   - Botón para marcar elementos como favoritos.
+*/
 .queue-favorite-toggle {
     width: 30px;
     height: 30px;
@@ -264,22 +373,37 @@
     transition: color 120ms ease, background-color 120ms ease;
 }
 
+/* .queue-favorite-toggle:hover,
+   .queue-favorite-toggle:focus-visible,
+   .queue-favorite-toggle[aria-pressed="true"]:
+   - Estados de hover y activado para el botón de favorito.
+*/
 .queue-favorite-toggle:hover,
 .queue-favorite-toggle:focus-visible,
 .queue-favorite-toggle[aria-pressed="true"] {
     color: #ffd166;
 }
 
+/* .queue-favorite-toggle:hover,
+   .queue-favorite-toggle:focus-visible:
+   - Estados de hover y foco para el botón de favorito.
+*/
 .queue-favorite-toggle:hover,
 .queue-favorite-toggle:focus-visible {
     outline: none;
     background: rgba(255, 209, 102, 0.12);
 }
 
+/* .queue-favorite-toggle:disabled:
+   - Estado deshabilitado para el botón de favorito.
+*/
 .queue-favorite-toggle:disabled {
     cursor: wait;
 }
 
+/* .queue-title:
+   - Título de cada elemento en la cola.
+*/
 .queue-title {
     overflow: hidden;
     color: #edf2f8;
@@ -289,6 +413,9 @@
     white-space: nowrap;
 }
 
+/* .queue-subtitle:
+   - Subtítulo de cada elemento en la cola.
+*/
 .queue-subtitle {
     overflow: hidden;
     margin-top: 2px;
@@ -298,16 +425,16 @@
     white-space: nowrap;
 }
 
+/* .queue-item.active .queue-title:
+   - Título de los elementos activos.
+*/
 .queue-item.active .queue-title {
     color: #ffe1af;
 }
 
-.queue-empty {
-    padding: 24px 12px;
-    color: #9aa8b8;
-    text-align: center;
-}
-
+/* #queue-list:focus-visible:
+   - Estado de foco para la lista de la cola.
+*/
 #queue-list:focus-visible {
     outline: 2px solid rgba(121, 184, 255, 0.72);
     outline-offset: -2px;
