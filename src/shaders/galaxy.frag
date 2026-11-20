@@ -1,227 +1,130 @@
 precision highp float;
 
-// Coordenadas UV procedentes del vertex shader
 varying vec2 vUv;
-
-// Tiempo y resolución
 uniform float uTime;
-uniform vec2 uResolution;
-
-// Datos resumidos de audio
+uniform vec2  uResolution;
 uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;
-
-// Texturas de audio
+uniform float uMidBeat;
+uniform float uTrebleBeat;
 uniform sampler2D uSpectrum;
-uniform sampler2D uWaveform;
+uniform sampler2D uWave;
 
-#define PI 3.14159265359
-#define TERRAIN_MAX_STEPS 96
+#define TAU 6.2831853
 
-float saturate(float x) {
-    return clamp(x, 0.0, 1.0);
-}
-
-vec2 saturate(vec2 x) {
-    return clamp(x, 0.0, 1.0);
-}
-
-float hash21(vec2 p) {
+// ---------- Hashes ----------
+float hash21(vec2 p){
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
 }
-
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+vec2 hash22(vec2 p){
+    p = vec2(dot(p, vec2(127.1, 311.7)),
+             dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453);
 }
 
-float fbm(vec2 p) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+// Devuelve: (distBorde, distCentro, hashCelda)
+vec3 voronoiCell(vec2 x){
+    vec2 n = floor(x);
+    vec2 f = fract(x);
+    vec2 mg = vec2(0.0), mr = vec2(0.0);
+    float md = 8.0;
 
-    for (int i = 0; i < 5; i++) {
-        value += amplitude * noise(p);
-        p = rot * p * 2.03 + 17.1;
-        amplitude *= 0.5;
-    }
-
-    return value;
-}
-
-// Muestreo robusto del espectro en coordenadas normalizadas.
-// El rango de graves, medios y agudos se mezcla con el movimiento temporal.
-float audioSpectrum(float x) {
-    float low  = texture2D(uSpectrum, vec2(clamp(x * 0.34, 0.0, 1.0), 0.5)).r;
-    float high = texture2D(uSpectrum, vec2(clamp(0.34 + x * 0.66, 0.0, 1.0), 0.5)).r;
-    return mix(low, high, smoothstep(0.15, 0.85, x));
-}
-
-// Terreno infinito visto desde una cámara baja.
-float terrainHeight(vec2 p) {
-    float travel = uTime * (0.45 + uVolume * 0.8);
-    vec2 q = p;
-    q.y += travel;
-
-    float large = fbm(q * 0.22 + vec2(0.0, travel * 0.12));
-    float detail = fbm(q * 0.72 - vec2(travel * 0.2, 0.0));
-    float ridges = abs(noise(q * 0.95) * 2.0 - 1.0);
-
-    // La textura de espectro introduce irregularidad espacial en las crestas.
-    float spec = audioSpectrum(fract(abs(p.x) * 0.045 + p.y * 0.008));
-    float music = uBass * 1.35 + uMid * 0.55 + uTreble * 0.25;
-    float pulse = uBeat * (0.35 + 0.65 * sin(p.y * 0.13 - uTime * 3.0));
-
-    return (large * 1.6 + detail * 0.55 + ridges * 0.22 - 0.85)
-         + music * (0.35 + spec * 1.15)
-         + pulse * 0.52;
-}
-
-float terrainDistance(vec3 p) {
-    // Escala vertical para evitar un terreno excesivamente agresivo.
-    return p.y - terrainHeight(p.xz) * 0.78;
-}
-
-vec3 terrainNormal(vec3 p) {
-    float e = 0.035;
-    float h = terrainDistance(p);
-    vec3 n = vec3(
-        terrainDistance(p + vec3(e, 0.0, 0.0)) - h,
-        terrainDistance(p + vec3(0.0, e, 0.0)) - h,
-        terrainDistance(p + vec3(0.0, 0.0, e)) - h
-    );
-    return normalize(n);
-}
-
-bool raymarchTerrain(vec3 ro, vec3 rd, out vec3 hit, out float distanceTravelled) {
-    float t = 0.0;
-
-    for (int i = 0; i < TERRAIN_MAX_STEPS; i++) {
-        vec3 p = ro + rd * t;
-        float d = terrainDistance(p);
-
-        if (d < 0.025) {
-            hit = p;
-            distanceTravelled = t;
-            return true;
+    for(int j = -1; j <= 1; j++){
+        for(int i = -1; i <= 1; i++){
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = hash22(n + g);
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if(d < md){ md = d; mr = r; mg = g; }
         }
-
-        // Marches conservadores: el terreno es una heightfield y no un SDF perfecto.
-        t += max(0.035, d * 0.34);
-        if (t > 90.0) break;
     }
 
-    distanceTravelled = t;
-    hit = ro + rd * t;
-    return false;
-}
-
-vec3 skyColor(vec2 uv, vec2 centeredUv) {
-    float horizon = smoothstep(-0.35, 0.65, centeredUv.y);
-    float pulse = 0.5 + 0.5 * sin(uTime * 1.4 + centeredUv.x * 5.0);
-    float energy = uVolume * 0.45 + uBeat * 0.8;
-
-    vec3 horizonColor = vec3(0.08, 0.18, 0.28);
-    vec3 zenithColor = vec3(0.005, 0.008, 0.035);
-    vec3 col = mix(horizonColor, zenithColor, horizon);
-
-    // Bandas atmosféricas reactivas.
-    float bands = pow(max(0.0, 1.0 - abs(centeredUv.y + 0.05)), 8.0);
-    col += vec3(0.10, 0.20, 0.38) * bands * (0.35 + energy);
-    col += vec3(0.15, 0.04, 0.20) * pulse * uTreble * 0.35;
-
-    // Sol/halo en el horizonte.
-    vec2 sunPos = vec2(0.12, 0.12 + uBeat * 0.035);
-    float sun = exp(-32.0 * length(centeredUv - sunPos));
-    col += vec3(0.95, 0.25, 0.08) * sun * (0.25 + uBass * 0.9);
-
-    return col;
-}
-
-float waveformLine(vec2 uv) {
-    // Se espera que la forma de onda esté almacenada en una textura horizontal.
-    float sampleValue = texture2D(uWaveform, vec2(clamp(uv.x, 0.002, 0.998), 0.5)).r;
-    float centeredSample = sampleValue * 2.0 - 1.0;
-
-    // Amplitud y offset para colocar el osciloscopio en primer plano.
-    float oscY = 0.76 + centeredSample * (0.075 + uVolume * 0.055);
-    float lineWidth = 0.0045 + uTreble * 0.003;
-    return 1.0 - smoothstep(lineWidth, lineWidth * 2.8, abs(uv.y - oscY));
-}
-
-void main() {
-    vec2 uv = vUv;
-    vec2 centered = uv * 2.0 - 1.0;
-    centered.x *= uResolution.x / max(uResolution.y, 1.0);
-
-    // Cámara con perspectiva apuntando hacia el terreno.
-    vec3 ro = vec3(0.0, 2.6 + uBass * 0.65 + uBeat * 0.25, -3.0);
-    ro.x += sin(uTime * 0.18) * (0.35 + uMid * 0.25);
-    ro.z += uTime * (0.35 + uVolume * 0.3);
-
-    vec3 target = vec3(0.0, 0.25 + uBass * 0.25, ro.z + 5.5);
-    vec3 forward = normalize(target - ro);
-    vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0)));
-    vec3 up = normalize(cross(right, forward));
-    vec3 rd = normalize(forward + right * centered.x * 0.92 + up * centered.y * 0.72);
-
-    vec3 color = skyColor(uv, centered);
-    vec3 hit;
-    float travel;
-
-    if (raymarchTerrain(ro, rd, hit, travel)) {
-        vec3 normal = terrainNormal(hit);
-        vec3 lightDir = normalize(vec3(-0.45, 0.9, -0.35));
-        float diffuse = max(dot(normal, lightDir), 0.0);
-        float rim = pow(1.0 - max(dot(normal, -rd), 0.0), 2.0);
-        float fog = exp(-travel * 0.018);
-
-        float h = terrainHeight(hit.xz);
-        float bands = 0.5 + 0.5 * sin(h * 7.0 + uTime * 0.8 + uBass * 4.0);
-        float grid = smoothstep(0.48, 0.5, abs(fract(hit.x * 0.28) - 0.5));
-        grid += smoothstep(0.48, 0.5, abs(fract(hit.z * 0.28) - 0.5));
-
-        vec3 terrainCol = mix(vec3(0.015, 0.055, 0.09), vec3(0.08, 0.28, 0.32), bands);
-        terrainCol += vec3(0.15, 0.36, 0.45) * diffuse * (0.35 + uMid);
-        terrainCol += vec3(0.25, 0.08, 0.38) * rim * (0.25 + uTreble);
-        terrainCol += vec3(0.05, 0.35, 0.42) * grid * (0.12 + uBeat * 0.8);
-
-        color = mix(color, terrainCol, fog);
+    float md2 = 8.0;
+    for(int j = -2; j <= 2; j++){
+        for(int i = -2; i <= 2; i++){
+            vec2 g = mg + vec2(float(i), float(j));
+            vec2 o = hash22(n + g);
+            vec2 r = g + o - f;
+            if(dot(mr - r, mr - r) > 0.0001)
+                md2 = min(md2, dot(0.5*(mr + r), normalize(r - mr)));
+        }
     }
 
-    // Viñeta suave.
-    float vignette = 1.0 - 0.28 * smoothstep(0.35, 1.25, length(centered));
-    color *= vignette;
+    float cellId = hash21(n + mg);
+    return vec3(md2, length(mr), cellId);
+}
 
-    // Osciloscopio luminoso en el primer plano.
-    float osc = waveformLine(uv);
-    float oscGlow = exp(-abs(uv.y - 0.76) * 18.0) * (0.12 + uVolume * 0.18);
-    vec3 oscColor = vec3(0.15, 0.85, 1.0) * (osc * (0.75 + uBeat * 0.6) + oscGlow);
-    color += oscColor;
+void main(){
+    vec2 uv = (vUv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
+    float r   = length(uv);
+    float ang = atan(uv.y, uv.x);
 
-    // Línea central y marco sutil del osciloscopio.
-    float centerLine = 1.0 - smoothstep(0.0015, 0.004, abs(uv.y - 0.76));
-    color += vec3(0.08, 0.28, 0.35) * centerLine * (0.25 + uVolume * 0.4);
+    // ---------- 1. Rotación global (mid + midBeat) ----------
+    float rot = uTime * 0.06 + uMid * 0.5 + uMidBeat * 0.4;
+    mat2 R = mat2(cos(rot), -sin(rot), sin(rot), cos(rot));
+    vec2 p = R * uv;
 
-    // Flash de beat muy contenido.
-    color += vec3(0.18, 0.05, 0.22) * uBeat * 0.12;
+    // ---------- 2. Escala de la retícula (bass + beat) ----------
+    float scale = 4.0 + uBass * 2.5 + uBeat * 1.5;
+    vec2 gp = p * scale;
 
-    // Tonemapping simple y gamma.
-    color = color / (1.0 + color);
-    color = pow(max(color, 0.0), vec3(0.4545));
+    // ---------- 3. Distorsión por la forma de onda (uWave) ----------
+    float wS = texture2D(uWave, vec2(fract(r * 0.35 + uTime * 0.05), 0.5)).r;
+    gp += vec2(wS, -wS) * (0.25 + uVolume * 0.6);
 
-    gl_FragColor = vec4(color, 1.0);
+    // ---------- 4. "Shatter" en beats: expansión radial ----------
+    gp *= 1.0 + uBeat * 0.12;
+
+    // ---------- 5. Célula Voronoi ----------
+    vec3 v = voronoiCell(gp);
+    float edgeDist   = v.x;
+    float centerDist = v.y;
+    float cellId     = v.z;
+
+    // ---------- 6. Glow de bordes (uMid + treble shimmer) ----------
+    float lineW = 0.035 + uVolume * 0.02;
+    float edgeGlow = smoothstep(lineW, 0.0, edgeDist);
+    edgeGlow = pow(edgeGlow, 1.6);
+
+    // ---------- 7. Núcleo de cada célula (respira con el espectro) ----------
+    float cellCore = smoothstep(0.75, 0.0, centerDist);
+    float spec = texture2D(uSpectrum, vec2(cellId, 0.5)).r;
+    spec = pow(spec, 1.3);
+
+    // Color por celda (paleta cíclica estable)
+    vec3 cellColor = 0.5 + 0.5 * cos(TAU * (cellId + vec3(0.0, 0.33, 0.67)));
+
+    // ---------- 8. Ondas expansivas desde el centro en cada beat ----------
+    float ringPhase = fract(uTime * 0.75);
+    float ring = exp(-abs(r - ringPhase * 1.4) * 28.0) * uBeat;
+    float ring2 = exp(-abs(r - fract(uTime * 0.75 + 0.5) * 1.4) * 32.0) * uMidBeat * 0.5;
+
+    // ---------- 9. Shimmer de agudos (chispas en la retícula) ----------
+    float shimmer = step(0.985, hash21(floor(gp * 18.0) + uTime * 0.5));
+    shimmer *= uTreble + uTrebleBeat * 1.5;
+
+    // ---------- 10. Composición ----------
+    vec3 col = vec3(0.0);
+    col += cellColor * cellCore * (0.12 + spec * 2.0 + uVolume * 0.35);
+    col += vec3(0.90, 0.95, 1.00) * edgeGlow * (0.30 + uMid * 1.4);
+    col += cellColor * edgeGlow * spec * 0.7;
+    col += vec3(1.00, 0.80, 0.55) * (ring + ring2) * 2.0;
+    col += vec3(1.00) * shimmer;
+
+    // ---------- 11. Aberración cromática en beats ----------
+    float ca = uBeat * 0.03 + uMidBeat * 0.015;
+    col.r *= 1.0 + ca;
+    col.b *= 1.0 + ca;
+
+    // ---------- 12. Viñeta + tone mapping ----------
+    col *= smoothstep(1.5, 0.35, r);
+    col  = col / (col + vec3(1.0));
+    col  = pow(col, vec3(0.4545));
+
+    gl_FragColor = vec4(col, 1.0);
 }

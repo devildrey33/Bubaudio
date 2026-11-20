@@ -115,13 +115,20 @@ Implementado:
 
 En desarrollo:
 
+- [ ] Añadir favoritos a la cola 
+- [ ] Actualizaciones automáticas
+- [ ] Busqueda en la librería
+- [ ] Ecualizador
+- [ ] Visualizador de escenas Threejs 
+- [ ]  - Utilizar nueva version de THREE.js
+- [ ]  - TSL 
+- [ ]  - Reactivo al mouse / rueda
+- [ ]  - Opciones de depuración para cada shader (he pensado en un lector de fragments que sustituya las macros por uniforms si está en modo debug)
+- [ ]  - Decidir fftSize, o añadir una opcion para modificar el fftSize 
+- [ ] Historial de modificaciones en la queue (control + z / y)
 - [ ] Metadatos ID3
 - [ ] Carátulas
-- [ ] Listas de reproducción
-- [ ] Búsqueda de canciones
-- [ ] Filtros por artista, álbum y género
-- [ ] Ecualizador
-- [ ] ReplayGain
+
 
 ---
 

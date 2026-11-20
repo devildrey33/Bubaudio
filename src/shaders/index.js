@@ -15,6 +15,7 @@ import digitalocean  from "./digitalocean.frag?raw";
 import krustyrobots  from "./krustyrobots.frag?raw";
 import freshquagga   from "./freshquagga.frag?raw";
 import neuralsynapse   from "./neuralsynapse.frag?raw";
+import ivancyberpunk   from "./ivancyberpunk.frag?raw";
 
 
 
@@ -34,6 +35,7 @@ const shaders = [
     { name : "krustyrobots", fragment : krustyrobots },
     { name : "freshquagga",  fragment : freshquagga  },
     { name : "neuralsynapse",  fragment : neuralsynapse  },
+    { name : "ivancyberpunk",  fragment : ivancyberpunk  },
 ];
 
 export default {

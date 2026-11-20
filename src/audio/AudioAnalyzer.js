@@ -28,17 +28,17 @@ export default class AudioAnalyzer {
     // Se convierten a índices de FFT usando la frecuencia de muestreo actual.
     static BASS_MIN = 20;
     static BASS_MAX = 250;
-
+    // Medios
     static MID_MIN = 250;
     static MID_MAX = 4000;
-
+    // Agudos
     static TREBLE_MIN = 4000;
     static TREBLE_MAX = 16000;
 
     // Peso de la muestra nueva al actualizar los niveles públicos. Corresponde
     // a un suavizado exponencial: valores mayores responden más rápido, pero
     // dejan pasar más variación entre frames.
-    static SMOOTHING = 0.2;
+    static SMOOTHING = 1.5;
 
     // El detector mantiene una referencia lenta del nivel habitual de cada banda.
     // Se actualiza una vez por frame; un valor bajo evita que esa referencia
@@ -380,12 +380,9 @@ export default class AudioAnalyzer {
 
         // La referencia sigue la señal despacio: así se adapta a canciones
         // más suaves o más fuertes, pero no absorbe de inmediato cada subida.
-        this.#bassBaseline +=
-            (bass - this.#bassBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
-        this.#midBaseline +=
-            (mid - this.#midBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
-        this.#trebleBaseline +=
-            (treble - this.#trebleBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+        this.#bassBaseline   += (bass - this.#bassBaseline)     * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+        this.#midBaseline    += (mid - this.#midBaseline)       * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+        this.#trebleBaseline += (treble - this.#trebleBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
 
         // Atenúa los pulsos en cada frame hasta que regresan a cero.
         this.#beat *= 0.92;
@@ -405,10 +402,7 @@ export default class AudioAnalyzer {
      * @returns {Number} Intensidad limitada al intervalo 0-1.
      */
     #transientStrength(change, threshold) {
-        return Math.min(
-            1,
-            0.35 + (change - threshold) / (threshold * 2) * 0.65
-        );
+        return Math.min(1, 0.35 + (change - threshold) / (threshold * 2) * 0.65);
     }
 
 

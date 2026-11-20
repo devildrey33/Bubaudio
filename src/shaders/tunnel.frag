@@ -25,13 +25,45 @@ uniform sampler2D uWaveform;
 
 #define PI 3.14159265359
 #define TAU 6.28318530718
-// En estas coordenadas, el signo negativo gira en sentido horario.
-#define VIEW_ROTATION -0.78539816339
 
-// Controles principales de movimiento. PARTICLE_SPEED se multiplica por el
-// avance del tunel; ambos valores deben ser positivos para mantener avance.
-#define TUNNEL_SPEED 1.8
-#define PARTICLE_SPEED 6.0
+// ============================================================================
+// CONTROLES PRINCIPALES — valores fáciles de ajustar
+// ============================================================================
+
+// Rotación inicial y velocidad de rotación global.
+// En esta convención, los valores negativos giran en sentido horario.
+#define VIEW_ROTATION          -0.78539816339
+#define ROTATION_SPEED         0.035
+
+// Movimiento del túnel y de las partículas.
+#define TUNNEL_SPEED           1.8
+#define PARTICLE_SPEED         6.0
+
+// Geometría general del túnel.
+#define BASE_WALL_RADIUS       1.42
+#define TUNNEL_RAY_SCALE       1.18
+#define TUNNEL_RAY_Z           1.5
+#define TUNNEL_SECTORS         20.0
+#define TUNNEL_CELL_LENGTH     2.3
+
+// Anillos: profundidad, expansión con el beat y aspecto visual.
+#define RING_DEPTH_OFFSET      1.0
+#define RING_RADIUS_PULSE      0.18
+#define RING_CORE_SHARPNESS    85.0
+#define RING_GLOW_SHARPNESS    18.0
+#define RING_COLOR_SPEED       0.075
+#define RING_COLOR_BEAT_SHIFT  0.18
+#define RING_COLOR_SPATIAL_SHIFT 0.22
+#define RING_CORE_INTENSITY    0.72
+#define RING_CORE_BEAT_GAIN    1.35
+#define RING_GLOW_INTENSITY    0.08
+#define RING_GLOW_BEAT_GAIN    0.20
+
+// Campo de partículas.
+#define PARTICLE_COUNT         28
+#define PARTICLE_DEPTH         40.0
+
+// ============================================================================
 
 // Valor pseudoaleatorio estable para cada indice de particula. Al no depender
 // del tiempo, cada aguja conserva su angulo, distancia y color entre frames.
@@ -65,6 +97,12 @@ void main()
     );
     float hueCycle = fract(time * 0.035);
     float beatStrength = clamp(beat + midBeat + trebleBeat, 0.0, 1.5);
+
+    // Suma de los tres detectores de beat. Se normaliza a 0..1 para
+    // controlar de forma estable el pulso del radio de los anillos.
+    float ringBeatSum = clamp(beat + midBeat + trebleBeat, 0.0, 3.0);
+    float ringBeatPulse = ringBeatSum / 3.0;
+
     vec3 bassBeatColor = vividPalette(hueCycle);
     vec3 midBeatColor = vividPalette(hueCycle + 0.333);
     vec3 trebleBeatColor = vividPalette(hueCycle + 0.667);
@@ -77,8 +115,11 @@ void main()
     // circulos sigan siendo circulos tambien en pantallas panoramicas.
     vec2 screen = vUv * 2.0 - 1.0;
     screen.x *= uResolution.x / uResolution.y;
-    float rotationCos = cos(VIEW_ROTATION);
-    float rotationSin = sin(VIEW_ROTATION);
+    // Rotación global lenta y continua. El signo negativo hace que avance
+    // en sentido de las agujas del reloj según esta transformación.
+    float viewRotation = VIEW_ROTATION - time * ROTATION_SPEED;
+    float rotationCos = cos(viewRotation);
+    float rotationSin = sin(viewRotation);
     screen = vec2(
         screen.x * rotationCos - screen.y * rotationSin,
         screen.x * rotationSin + screen.y * rotationCos
@@ -88,10 +129,10 @@ void main()
     // El desplazamiento del patron solo crece con el tiempo: el tunel nunca
     // retrocede. El rayo apunta hacia +Z, desde la camara hacia el fondo.
     float forwardTravel = time * TUNNEL_SPEED;
-    vec3 rayDirection = normalize(vec3(screen * 1.18, 1.5));
+    vec3 rayDirection = normalize(vec3(screen * TUNNEL_RAY_SCALE, TUNNEL_RAY_Z));
     float rayAngle = atan(rayDirection.y, rayDirection.x);
     float angle01 = fract(rayAngle / TAU + 0.5);
-    float sectorPosition = angle01 * 20.0;
+    float sectorPosition = angle01 * TUNNEL_SECTORS;
     float sectorId = floor(sectorPosition);
     float sectorPhase = fract(sectorPosition);
     float barPanel = mod(sectorId, 2.0);
@@ -123,7 +164,6 @@ void main()
 
     // Interseccion del rayo con la pared. La forma de onda, los graves y los
     // tres tipos de beat deforman el radio, pero nunca invierten el avance.
-    const float BASE_WALL_RADIUS = 1.42;
     float wallRadius = BASE_WALL_RADIUS
                      + waveform * (0.11 + bass * 0.055) * (1.0 - barPanel)
                      + bass * 0.025
@@ -132,23 +172,28 @@ void main()
                      + trebleBeat * 0.025;
     float radialRay = max(length(rayDirection.xy), 0.04);
     float hitDistance = wallRadius / radialRay;
-    float staticHitDistance = BASE_WALL_RADIUS / radialRay;
     vec3 wallPosition = rayDirection * hitDistance;
     float tunnelZ = wallPosition.z + forwardTravel;
 
-    // Anillos estructurales calculados sobre el radio base, no sobre la pared
-    // deformada. Sirven de soporte visual estable bajo los efectos de audio.
-    float staticTunnelZ = rayDirection.z * staticHitDistance + forwardTravel;
-    float staticAxialPhase = fract(staticTunnelZ / 2.3);
+    // Anillos estructurales desplazados ligeramente hacia el fondo del túnel.
+    // El radio reacciona a la suma de beat, midBeat y trebleBeat.
+    float ringRadius = BASE_WALL_RADIUS
+                     + ringBeatPulse * RING_RADIUS_PULSE;
+    float staticRingHitDistance = ringRadius / radialRay;
+
+    float staticTunnelZ = rayDirection.z * staticRingHitDistance
+                        + forwardTravel
+                        + float(RING_DEPTH_OFFSET);
+    float staticAxialPhase = fract(staticTunnelZ / TUNNEL_CELL_LENGTH);
     float staticAxialEdge = min(staticAxialPhase, 1.0 - staticAxialPhase);
-    float staticRingCore = exp(-staticAxialEdge * 85.0);
-    float staticRingGlow = exp(-staticAxialEdge * 18.0);
+    float staticRingCore = exp(-staticAxialEdge * RING_CORE_SHARPNESS);
+    float staticRingGlow = exp(-staticAxialEdge * RING_GLOW_SHARPNESS);
 
     // Dividir la pared en 20 sectores angulares y paneles repetidos en Z.
     // Los sectores pares conservan el osciloscopio; los impares reservaran
     // su superficie para barras de espectro.
     float angularEdge = min(sectorPhase, 1.0 - sectorPhase);
-    float axialCell = fract(tunnelZ / 2.3);
+    float axialCell = fract(tunnelZ / TUNNEL_CELL_LENGTH);
     float axialEdge = min(axialCell, 1.0 - axialCell);
     float panelMask = smoothstep(0.018, 0.075, angularEdge)
                     * smoothstep(0.025, 0.10, axialEdge);
@@ -159,7 +204,7 @@ void main()
     float ringCore = exp(-axialEdge * 85.0);
     float ringGlow = exp(-axialEdge * 18.0);
     float panelId = floor(sectorPosition);
-    float ringId = floor(tunnelZ / 2.3);
+    float ringId = floor(tunnelZ / TUNNEL_CELL_LENGTH);
     float panelAlternate = mod(panelId + ringId, 2.0);
     float panelShade = 0.72 + panelAlternate * 0.28 + spectrum * 0.18;
 
@@ -243,13 +288,28 @@ void main()
     wallColor += cyan * ringCore * (0.35 + pulseLight * 2.2);
     wallColor += warmLight * angularSeam * trebleBeat * 0.55;
 
-    // Atenuar la pared con la distancia. El anillo blanco usa la distancia
-    // del radio base para mantener su posicion independiente del audio.
+    // Atenuar la pared con la distancia.
     float distanceFade = exp(-hitDistance * 0.018);
     wallColor *= 0.34 + 0.66 * distanceFade;
-    float staticDistanceFade = exp(-staticHitDistance * 0.018);
-    wallColor += vec3(1.0)
-               * (staticRingCore * 0.9 + staticRingGlow * 0.12)
+
+    // Paleta vistosa animada. El núcleo y el halo usan fases cercanas para
+    // conservar coherencia cromática sin que el anillo sea blanco fijo.
+    float ringColorPhase = fract(
+        time * RING_COLOR_SPEED
+        + ringBeatPulse * RING_COLOR_BEAT_SHIFT
+        + staticAxialPhase * RING_COLOR_SPATIAL_SHIFT
+    );
+    vec3 ringColor = vividPalette(ringColorPhase);
+    vec3 ringGlowColor = vividPalette(ringColorPhase + 0.12);
+
+    float staticDistanceFade = exp(-staticRingHitDistance * 0.018);
+    wallColor += ringColor
+               * staticRingCore
+               * (RING_CORE_INTENSITY + ringBeatPulse * RING_CORE_BEAT_GAIN)
+               * (0.34 + 0.66 * staticDistanceFade);
+    wallColor += ringGlowColor
+               * staticRingGlow
+               * (RING_GLOW_INTENSITY + ringBeatPulse * RING_GLOW_BEAT_GAIN)
                * (0.34 + 0.66 * staticDistanceFade);
 
     // Fondo oscuro y portal de fuga al centro. La pared aparece gradualmente
@@ -314,8 +374,8 @@ void main()
     // Campo de agujas. Cada indice recibe una posicion inicial estable dentro
     // de un tramo profundo del tunel; al restar el avance, se acerca a camara.
     float beatDrive = clamp(beat * 0.8 + midBeat * 0.65 + trebleBeat * 0.5, 0.0, 1.5);
-    const float PARTICLE_DEPTH = 40.0;
-    for (int particleIndex = 0; particleIndex < 28; particleIndex++)
+    
+    for (int particleIndex = 0; particleIndex < PARTICLE_COUNT; particleIndex++)
     {
         float seed = particleHash(float(particleIndex) + 7.31);
         float particleAngle = TAU * fract(seed * 13.17);

@@ -325,43 +325,21 @@ export default class Visualizer {
 
         this.#waveformTexture.needsUpdate = true;
 
-        this.#fftTexture.image.data.set(
-            this.#audio.spectrum.subarray(
-                0,
-                Tam
-            )
-        );
+        this.#fftTexture.image.data.set(this.#audio.spectrum.subarray(0, Tam));
 
         this.#fftTexture.needsUpdate = true;
 
         // Los uniforms escalares se actualizan en el mismo frame que las
         // texturas para que el shader lea una instantánea coherente del audio.
-        this.#uniforms.uTime.value =
-            time * 0.001;
-
-        this.#uniforms.uFrame.value =
-            this.#frame++;
-
-        this.#uniforms.uBass.value =
-            this.#audio.bass;
-
-        this.#uniforms.uMid.value =
-            this.#audio.mid;
-
-        this.#uniforms.uTreble.value =
-            this.#audio.treble;
-
-        this.#uniforms.uVolume.value =
-            this.#audio.volume;
-
-        this.#uniforms.uBeat.value =
-            this.#audio.beat;
-
-        this.#uniforms.uMidBeat.value =
-            this.#audio.midBeat;
-
-        this.#uniforms.uTrebleBeat.value =
-            this.#audio.trebleBeat;
+        this.#uniforms.uTime.value          = time * 0.001;
+        this.#uniforms.uFrame.value         = this.#frame++;
+        this.#uniforms.uBass.value          = this.#audio.bass;
+        this.#uniforms.uMid.value           = this.#audio.mid;
+        this.#uniforms.uTreble.value        = this.#audio.treble;
+        this.#uniforms.uVolume.value        = this.#audio.volume;
+        this.#uniforms.uBeat.value          = this.#audio.beat;
+        this.#uniforms.uMidBeat.value       = this.#audio.midBeat;
+        this.#uniforms.uTrebleBeat.value    = this.#audio.trebleBeat;
 
         this.#renderer.render(
             this.#scene,
@@ -384,17 +362,13 @@ export default class Visualizer {
      */
     setShader(index = 0) {
 
-        if (
-            index < 0 ||
-            index >= shaders.shaders.length
-        ) {
+        if (index < 0 || index >= shaders.shaders.length) {
             return;
         }
 
         this.#shaderIndex = index;
 
-        this.#material.fragmentShader =
-            shaders.shaders[index].fragment;
+        this.#material.fragmentShader = shaders.shaders[index].fragment;
 
         this.#material.needsUpdate = true;
 

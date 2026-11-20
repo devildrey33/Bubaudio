@@ -1,179 +1,231 @@
-// MATRIZ + DISTORSION DE ONDA AUDIOREACTIVA
-// Shader procedural para THREE.ShaderMaterial / GLSL ES 1.00.
-// Requiere varying vec2 vUv desde el vertex shader.
-// Audio resumido y texturas en el canal R, normalizados a [0,1].
-#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
-#else
-precision mediump float;
-#endif
 
 varying vec2 vUv;
 
 uniform float uTime;
 uniform vec2 uResolution;
+
 uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
+
 uniform float uBeat;
+uniform float uMidBeat;
+uniform float uTrebleBeat;
+
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
-const float PI = 3.14159265359;
-const float TAU = 6.28318530718;
+#define PI 3.14159265359
+#define TAU 6.28318530718
+#define FRACTAL_LAYERS 5
+#define ANGULAR_BRANCHES 72.0
 
 float sat(float x) {
     return clamp(x, 0.0, 1.0);
 }
 
 float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
+    p = fract(p * vec2(127.1, 311.7));
+    p += vec2(dot(p, p + vec2(269.5, 183.3)));
+    return fract(sin(p.x * p.y) * 43758.5453);
 }
 
-vec2 hash22(vec2 p) {
-    float n = sin(dot(p, vec2(41.17, 289.31))) * 43758.5453;
-    return fract(vec2(n, n * 1.731 + 17.17));
+float noise21(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-float spectrum(float x) {
-    return sat(texture2D(uSpectrum, vec2(clamp(x, 0.002, 0.998), 0.5)).r);
+float lineGlow(float distanceToLine, float width) {
+    return exp(-abs(distanceToLine) / max(width, 0.00001));
 }
 
-float waveform(float x) {
-    return texture2D(uWaveform, vec2(clamp(x, 0.002, 0.998), 0.5)).r * 2.0 - 1.0;
+float segmentDistance(vec2 p, vec2 a, vec2 b) {
+    vec2 ab = b - a;
+    float h = clamp(dot(p - a, ab) / max(dot(ab, ab), 0.00001), 0.0, 1.0);
+    return length(p - (a + ab * h));
 }
 
-// Caracteres pseudo-digitales de 5x7 bits. No necesita una textura de fuente.
-float glyph5x7(float id, vec2 cell) {
-    float x = floor(cell.x);
-    float y = floor(cell.y);
-    if (x < 0.0 || x > 4.0 || y < 0.0 || y > 6.0) return 0.0;
+vec3 palette(float amount, float trebleAmount) {
+    vec3 magenta = vec3(1.0, 0.055, 0.34);
+    vec3 violet = vec3(0.62, 0.12, 0.95);
+    vec3 cyan = vec3(0.04, 0.78, 1.0);
 
-    // Cada identificador genera una mascara determinista con diagonales y huecos.
-    float seed = floor(id * 17.0 + 3.0);
-    float bitA = floor(mod(seed * 1.37 + y * 5.0 + x * 3.0, 7.0));
-    float bitB = floor(mod(seed * 0.73 + y * 3.0 - x * 2.0, 5.0));
-    float frame = step(0.5, step(0.5, x) * step(x, 3.5)
-                             + step(0.5, y) * step(y, 5.5));
-    float diagonal = step(0.5, mod(x + y + seed, 3.0));
-    float center = step(0.5, 1.0 - abs(x - 2.0)) * step(0.5, 1.0 - abs(y - 3.0));
-    return max(frame * step(0.5, bitA), max(diagonal * step(0.5, bitB), center));
-}
-
-// Una columna de caracteres con profundidad y velocidad propia.
-float matrixColumn(vec2 p, float columnCount, float seedOffset) {
-    float scaledX = p.x * columnCount;
-    float column = floor(scaledX);
-    float localX = fract(scaledX);
-    float seed = hash21(vec2(column, seedOffset));
-    float speed = mix(0.55, 1.65, seed) * (0.70 + 0.55 * sat(uMid));
-    float head = fract(uTime * speed * 0.085 + seed * 4.0 + seedOffset);
-    float trailLength = mix(0.16, 0.43, hash21(vec2(column + 4.0, seedOffset)));
-    float localY = fract(p.y + head);
-    float trail = 1.0 - smoothstep(trailLength, 0.0, localY);
-    float row = floor((p.y + head) * 25.0);
-    float glyphX = fract(localX * 7.0) * 5.0;
-    float glyphY = fract((p.y + head) * 25.0) * 7.0;
-    float id = hash21(vec2(column + row * 0.17, seedOffset + 11.0));
-    float glyph = glyph5x7(id * 13.0, vec2(glyphX, glyphY));
-
-    float headLight = 1.0 - smoothstep(0.0, 0.12, localY);
-    float scan = 0.72 + 0.28 * sin((p.y + head) * 25.0 * PI);
-    float audioBand = spectrum(fract((column + 0.5) / columnCount));
-    return glyph * trail * scan * (0.38 + 0.82 * audioBand)
-         + glyph * headLight * (0.75 + 0.8 * sat(uBeat));
+    vec3 c = mix(magenta, violet, smoothstep(0.20, 0.55, amount));
+    c = mix(c, cyan, smoothstep(0.52, 0.95, amount + trebleAmount * 0.25));
+    return c;
 }
 
 void main() {
+    vec2 p = vUv - 0.5;
+    p.x *= uResolution.x / max(uResolution.y, 1.0);
+
+    float time = uTime;
     float bass = sat(uBass);
     float mid = sat(uMid);
     float treble = sat(uTreble);
     float volume = sat(uVolume);
     float beat = sat(uBeat);
-    float t = mod(uTime, 600.0);
+    float midBeat = sat(uMidBeat);
+    float trebleBeat = sat(uTrebleBeat);
 
-    vec2 resolution = max(uResolution, vec2(1.0));
-    vec2 uv = vUv;
-    vec2 aspectUv = (uv * 2.0 - 1.0)
-                  * vec2(resolution.x / resolution.y, 1.0);
+    // Perspectiva: el círculo fractal se transforma en una elipse inclinada.
+    float tilt = 0.40 + bass * 0.035 + beat * 0.025;
+    vec2 q = vec2(p.x, p.y / tilt);
+    float radius = length(q);
+    float angle = atan(q.y, q.x);
+    float angle01 = fract(angle / TAU + 0.5);
 
-    // Distorsion principal: cada punto de la pantalla toma una onda de audio.
-    float waveSample = waveform(uv.x * 0.92 + 0.04);
-    float waveSample2 = waveform(fract(uv.x * 0.53 + t * 0.018));
-    float waveField = sin(uv.x * 18.0 + t * 1.3)
-                    * (0.45 + 0.55 * abs(waveSample));
-    float distortion = waveSample * (0.035 + 0.13 * volume)
-                     + waveField * (0.008 + 0.035 * mid)
-                     + waveSample2 * 0.028 * beat;
+    // Audio circular: cada región angular del fractal recibe una frecuencia distinta.
+    float spectrum = texture2D(uSpectrum, vec2(angle01, 0.5)).r;
+    float spectrum2 = texture2D(uSpectrum, vec2(fract(angle01 + 0.015), 0.5)).r;
+    float waveform = texture2D(
+        uWaveform,
+        vec2(fract(angle01 + time * 0.018), 0.5)
+    ).r;
+    float signedWave = waveform * 2.0 - 1.0;
 
-    vec2 warped = uv;
-    warped.y += distortion;
-    warped.x += sin(uv.y * 15.0 - t * 1.8) * (0.006 + 0.025 * bass);
+    float audio = sat(spectrum * 0.72 + bass * 0.18 + volume * 0.10);
+    float pulse = 1.0 + beat * 0.16 + midBeat * 0.045;
+    float ringRadius = 0.235 * pulse + signedWave * 0.006 * mid;
 
-    // Separacion cromatica reactiva, como aberracion de una pantalla dañada.
-    float chroma = 0.002 + 0.010 * treble + 0.018 * beat;
-    vec2 redUv = warped + vec2(chroma * waveSample, 0.0);
-    vec2 blueUv = warped - vec2(chroma * waveSample, 0.0);
+    // Fondo espacial.
+    vec3 color = vec3(0.0015, 0.004, 0.022);
+    float cloud = noise21(p * 3.0 + vec2(time * 0.012, -time * 0.008));
+    cloud += noise21(p * 8.0 - time * 0.016) * 0.45;
+    color += vec3(0.005, 0.035, 0.095) * cloud * (0.65 + volume * 0.8);
 
-    float greenRain = matrixColumn(warped, 34.0, 2.0);
-    float redRain = matrixColumn(redUv, 34.0, 8.0);
-    float blueRain = matrixColumn(blueUv, 34.0, 17.0);
+    // Polvo estelar.
+    vec2 starGrid = floor(p * 44.0);
+    float star = step(0.988, hash21(starGrid));
+    float starPulse = 0.55 + 0.45 * sin(time * 2.0 + hash21(starGrid + 7.0) * TAU);
+    color += vec3(0.12, 0.37, 0.75) * star * starPulse * (0.15 + treble * 0.7);
 
-    vec3 color = vec3(redRain * 0.44, greenRain, blueRain * 0.72);
+    // Órbitas de fondo.
+    float orbitA = abs(radius - (0.38 + sin(angle * 2.0 + time * 0.16) * 0.025));
+    float orbitB = abs(radius - (0.52 + cos(angle * 3.0 - time * 0.11) * 0.03));
+    color += vec3(0.01, 0.12, 0.25) * exp(-orbitA * 72.0) * 0.30;
+    color += vec3(0.02, 0.06, 0.16) * exp(-orbitB * 90.0) * 0.22;
 
-    // Rejilla digital y lineas de refresco.
-    vec2 gridUv = warped * vec2(34.0, 25.0);
-    vec2 gridCell = fract(gridUv);
-    float gridLines = 1.0 - smoothstep(0.035, 0.12,
-                           min(gridCell.x, gridCell.y));
-    float scanline = 0.5 + 0.5 * sin(warped.y * resolution.y * 0.09 + t * 8.0);
-    color += vec3(0.005, 0.07, 0.04) * gridLines * (0.5 + 0.5 * scanline);
-    color *= 0.82 + 0.18 * scanline;
+    // Halo y línea principal del anillo.
+    float ringDistance = abs(radius - ringRadius);
+    float ringHalo = exp(-ringDistance * (25.0 - midBeat * 6.0));
+    float ringCore = exp(-ringDistance * (145.0 + mid * 55.0));
 
-    // Onda sonora visible: una serpiente luminosa que atraviesa la lluvia.
-    float waveY = 0.5 + waveSample * (0.07 + 0.15 * volume)
-                + 0.025 * sin(uv.x * 52.0 - t * 3.0);
-    float distanceToWave = abs(uv.y - waveY);
-    float waveLine = exp(-distanceToWave * (115.0 - 35.0 * treble));
-    float waveHalo = exp(-distanceToWave * 22.0);
-    color += vec3(0.10, 0.95, 0.62) * waveLine * (0.4 + volume * 0.9);
-    color += vec3(0.02, 0.36, 0.28) * waveHalo * (0.25 + mid * 0.55);
+    color += vec3(0.015, 0.39, 0.80) * ringHalo * (0.25 + volume * 0.65);
+    color += vec3(0.32, 0.88, 1.0) * ringCore * (0.75 + mid * 1.4 + midBeat);
 
-    // Banda de espectro deformadora en el centro.
-    float spectralBand = spectrum(uv.x);
-    float bandY = 0.51 + (spectralBand - 0.5) * (0.09 + 0.10 * bass);
-    float band = exp(-abs(uv.y - bandY) * 38.0) * spectralBand;
-    color += vec3(0.05, 0.42, 0.22) * band * (0.3 + volume);
+    // Fractal radial: repetición angular y varias capas de subdivisión.
+    // Cada capa genera ramas secundarias alrededor del anillo.
+    float fractalLight = 0.0;
+    float branchActivity = 0.0;
+    vec3 fractalColor = vec3(0.0);
 
-    // Glitches horizontales disparados por graves y beats.
-    float glitchSeed = floor(uv.y * 95.0 + t * 0.7);
-    float glitchRandom = hash21(vec2(glitchSeed, floor(t * 2.0)));
-    float glitch = step(0.76 - beat * 0.20, glitchRandom)
-                 * step(0.30, sin(t * 8.0 + glitchSeed));
-    float glitchOffset = (hash21(vec2(glitchSeed + 8.0, t)) - 0.5)
-                       * glitch * (0.035 + 0.11 * bass);
-    float glitchRain = matrixColumn(warped + vec2(glitchOffset, 0.0), 34.0, 29.0);
-    color += vec3(glitchRain * 0.20, glitchRain * 0.55, glitchRain * 0.30) * glitch;
+    for (int layer = 0; layer < FRACTAL_LAYERS; layer++) {
+        float fi = float(layer);
+        float scale = pow(1.72, fi);
+        float layerRadius = radius - ringRadius;
 
-    // Destellos verticales de alta frecuencia.
-    float sparkColumn = floor(uv.x * 34.0);
-    float sparkId = hash21(vec2(sparkColumn, floor(t * 0.45)));
-    float spark = exp(-abs(fract(uv.y + t * (0.05 + sparkId * 0.1)) - sparkId)
-                      * 65.0);
-    color += vec3(0.25, 1.0, 0.64) * spark * treble
-           * (0.18 + 0.75 * beat);
+        // Coordenadas polares repetidas: equivalente visual a subdividir ramas.
+        float localAngle = angle * scale;
+        localAngle += time * (0.32 + bass * 0.75) * (fi + 1.0);
+        localAngle += signedWave * (0.45 + mid * 0.8) * (fi + 1.0);
 
-    // Viñeta y brillo fosforado de monitor.
-    float vignette = 1.0 - smoothstep(0.35, 1.25, length(aspectUv));
-    float phosphor = 0.90 + 0.10 * sin(uv.y * resolution.y * 0.045);
-    color *= (0.38 + 0.62 * vignette) * phosphor;
-    color *= 0.60 + 0.75 * volume;
-    color = vec3(1.0) - exp(-color * 1.65);
-    color = pow(max(color, vec3(0.0)), vec3(0.92));
+        float angularCell = abs(atan(sin(localAngle), cos(localAngle)));
+        float branch = exp(-angularCell * (20.0 + fi * 8.0));
+
+        // Alternancia de subramas para evitar un círculo uniforme.
+        float split = abs(sin(localAngle * 0.5 + fi * 1.7));
+        split = smoothstep(0.20, 0.92, split);
+
+        // La onda de audio desplaza radialmente cada nivel fractal.
+        float waveOffset = signedWave * (0.006 + fi * 0.003) * mid;
+        float radialPhase = layerRadius - waveOffset;
+
+        // Longitud creciente con el espectro y los beats.
+        float layerLength = 0.060 + audio * (0.095 + bass * 0.075);
+        layerLength *= 1.0 + fi * 0.16;
+        layerLength *= 1.0 + beat * (0.55 - fi * 0.045);
+
+        // Segmentos principales que nacen desde el anillo.
+        float radialLine = smoothstep(0.0, 0.013 + fi * 0.003, radialPhase);
+        radialLine *= 1.0 - smoothstep(layerLength, layerLength + 0.018, radialPhase);
+        radialLine *= branch;
+
+        // Subramas fractales: pequeños segmentos desplazados y más finos.
+        float subStart = layerLength * (0.27 + split * 0.16);
+        float subLength = layerLength * (0.28 - fi * 0.018);
+        float subLine = smoothstep(subStart, subStart + 0.009, radialPhase);
+        subLine *= 1.0 - smoothstep(subStart + subLength, subStart + subLength + 0.012, radialPhase);
+        subLine *= branch * split;
+
+        // Puntas de las ramas.
+        float tip = exp(-abs(radialPhase - layerLength) * (80.0 + fi * 18.0));
+        tip *= branch;
+
+        float intensity = radialLine * (0.34 + audio * 1.55 + trebleBeat * 0.4);
+        intensity += subLine * (0.15 + mid * 0.95) * (1.0 - fi * 0.11);
+        intensity += tip * (0.18 + treble * 1.55 + trebleBeat);
+
+        vec3 layerColor = palette(
+            audio + fi * 0.07,
+            treble * (0.45 + fi * 0.12)
+        );
+
+        fractalLight += intensity;
+        branchActivity += branch * (0.15 + audio);
+        fractalColor += layerColor * intensity;
+    }
+
+    color += fractalColor;
+
+    // Filamentos finos, aleatorios, alrededor de las ramas principales.
+    float branchIndex = floor(angle01 * ANGULAR_BRANCHES);
+    float branchRandom = hash21(vec2(branchIndex, 8.73));
+    float filamentAudio = texture2D(
+        uSpectrum,
+        vec2((branchIndex + 0.5) / ANGULAR_BRANCHES, 0.5)
+    ).r;
+
+    float filamentLength = 0.10 + filamentAudio * 0.25 + beat * 0.10;
+    filamentLength *= 0.55 + branchRandom * 0.75;
+    float filamentStart = ringRadius + 0.025 + branchRandom * 0.025;
+    float filamentEnd = filamentStart + filamentLength;
+    float filamentAngular = abs(angle01 - (branchIndex + 0.5) / ANGULAR_BRANCHES);
+    filamentAngular = min(filamentAngular, 1.0 - filamentAngular);
+    float filamentMask = 1.0 - smoothstep(0.002, 0.007, filamentAngular);
+    float filamentLine = smoothstep(filamentStart, filamentStart + 0.008, radius);
+    filamentLine *= 1.0 - smoothstep(filamentEnd - 0.012, filamentEnd, radius);
+    filamentLine *= filamentMask * (0.20 + treble * 0.8);
+
+    color += mix(vec3(0.95, 0.05, 0.40), vec3(0.15, 0.78, 1.0), filamentAudio) * filamentLine;
+
+    // Sol central con resplandor y pequeñas líneas radiales.
+    float centerGlow = exp(-radius * (22.0 - beat * 5.0));
+    float centerCore = exp(-radius * 115.0);
+    float centerRays = pow(abs(sin(angle * 20.0 + time * 0.65)), 18.0);
+    centerRays *= exp(-radius * 19.0);
+
+    color += vec3(0.10, 0.40, 0.95) * centerGlow * (0.35 + volume);
+    color += vec3(0.70, 0.90, 1.0) * centerRays * (0.18 + treble + trebleBeat);
+    color += vec3(1.0) * centerCore * (1.4 + beat * 2.0);
+
+    // Viñeta y acabado luminoso.
+    float vignette = 1.0 - smoothstep(0.43, 0.95, length(p));
+    color *= 0.70 + vignette * 0.45;
+    color *= 0.76 + volume * 0.48;
+
+    color = 1.0 - exp(-color * (1.20 + beat * 0.4));
+    color = pow(max(color, 0.0), vec3(0.84));
 
     gl_FragColor = vec4(color, 1.0);
-    #include <colorspace_fragment>
 }
