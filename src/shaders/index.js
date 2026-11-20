@@ -12,8 +12,8 @@ import livingorb2    from "./livingorb2.frag?raw";
 import livingorb3    from "./livingorb3.frag?raw";
 import dualwaveform  from "./dualwaveform.frag?raw";
 import digitalocean  from "./digitalocean.frag?raw";
-import krustyrobots  from "./krustyrobots.frag?raw";
-import freshquagga   from "./freshquagga.frag?raw";
+//import krustyrobots  from "./krustyrobots.frag?raw";
+//import freshquagga   from "./freshquagga.frag?raw";
 import neuralsynapse   from "./neuralsynapse.frag?raw";
 import ivancyberpunk   from "./ivancyberpunk.frag?raw";
 
@@ -32,8 +32,8 @@ const shaders = [
     { name : "Dual Wave",    fragment : dualwaveform },
     { name : "DigitalOcean", fragment : digitalocean },
     { name : "Tunnel",       fragment : tunnel       },
-    { name : "krustyrobots", fragment : krustyrobots },
-    { name : "freshquagga",  fragment : freshquagga  },
+//    { name : "krustyrobots", fragment : krustyrobots },
+//    { name : "freshquagga",  fragment : freshquagga  },
     { name : "neuralsynapse",  fragment : neuralsynapse  },
     { name : "ivancyberpunk",  fragment : ivancyberpunk  },
 ];

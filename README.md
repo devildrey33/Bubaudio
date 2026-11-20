@@ -10,7 +10,7 @@ Actualmente el proyecto se encuentra en desarrollo activo.
 
 ## Descarga
 
-- [Bubaudio 0.5.1 para Windows (x64)](http://devildrey33.es/Bubaudio/Bubaudio_0.5.1_x64_en-US.msi)
+- [Bubaudio 0.5.1 para Windows (x64)](http://devildrey33.es/Bubaudio/Bubaudio_0.5.2_x64_en-US.msi)
 
 ---
 
@@ -116,6 +116,7 @@ Implementado:
 En desarrollo:
 
 - [ ] Añadir favoritos a la cola 
+- [ ] Drag & Drop desde el reproductor a una nueva cola
 - [ ] Actualizaciones automáticas
 - [ ] Busqueda en la librería
 - [ ] Ecualizador
