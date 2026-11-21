@@ -10,6 +10,7 @@ Actualmente el proyecto se encuentra en desarrollo activo.
 
 ## Descarga
 
+Puedes descargar el instalador de Bubaudio en formato zip, el cual contiene un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller (extensión MSI)
 - [Bubaudio 0.5.2 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.2_x64_en-US.zip)
 ---
 
