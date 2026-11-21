@@ -10,8 +10,7 @@ Actualmente el proyecto se encuentra en desarrollo activo.
 
 ## Descarga
 
-- [Bubaudio 0.5.2 para Windows (x64)](http://devildrey33.es/Bubaudio/Bubaudio_0.5.2_x64_en-US.zip)
-
+- [Bubaudio 0.5.2 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.2_x64_en-US.zip)
 ---
 
 Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para desarrollar este reproductor.
@@ -115,6 +114,7 @@ Implementado:
 
 En desarrollo:
 
+- [NO NEED GHC] Revisar por que no va el enlace de descarga del github
 - [ ] Añadir favoritos a la cola 
 - [ ] Drag & Drop desde el reproductor a una nueva cola
 - [ ] Actualizaciones automáticas
