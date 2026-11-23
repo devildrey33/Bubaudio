@@ -6,15 +6,16 @@ El objetivo del proyecto es ofrecer una experiencia centrada en la colección mu
 
 Actualmente el proyecto se encuentra en desarrollo activo.
 
+Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para desarrollar este reproductor.
+
 ---
 
 ## Descarga
 
 Puedes descargar el instalador de Bubaudio 0.5.2 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
 - [Bubaudio 0.5.2 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.2_x64_en-US.zip)
----
 
-Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para desarrollar este reproductor.
+![Bubaudio1](docs/Bubaudio.png)
 
 ---
 
