@@ -49,6 +49,9 @@ export default class Visualizer {
     // Textura 1D con muestras de la forma de onda temporal.
     #waveformTexture;
 
+    // Textura 2D con el historial del fft
+    #fftHistoryTexture;
+
     // Contador incremental enviado al shader; no es una medida de tiempo.
     #frame = 0;
 
@@ -83,23 +86,11 @@ export default class Visualizer {
 
         this.#scene = new THREE.Scene();
 
-        this.#camera = new THREE.OrthographicCamera(
-            -1,
-            1,
-            1,
-            -1,
-            0,
-            1
-        );
+        this.#camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-        this.#renderer = new THREE.WebGLRenderer({
-            antialias : true
-        });
+        this.#renderer = new THREE.WebGLRenderer({ antialias : true });
 
-        this.#renderer.setSize(
-            window.innerWidth,
-            window.innerHeight
-        );
+        this.#renderer.setSize(window.innerWidth, window.innerHeight);
 
         // El renderer crea y posee este canvas; la clase lo expone mediante
         // canvas para que otras partes de la aplicación puedan consultarlo.
@@ -121,23 +112,19 @@ export default class Visualizer {
 
         // DataTexture conserva un buffer CPU que puede actualizarse sin crear
         // una textura nueva en cada frame.
-        this.#waveformTexture = new THREE.DataTexture(
-            new Uint8Array(Tam),
-            Tam,
-            1,
-            THREE.RedFormat
-        );
+        this.#waveformTexture = new THREE.DataTexture(new Uint8Array(Tam), Tam, 1, THREE.RedFormat);
 
         this.#waveformTexture.needsUpdate = true;
 
-        this.#fftTexture = new THREE.DataTexture(
-            new Uint8Array(Tam),
-            Tam,
-            1,
-            THREE.RedFormat
-        );
-
+        this.#fftTexture = new THREE.DataTexture(new Uint8Array(Tam), Tam, 1, THREE.RedFormat);
         this.#fftTexture.needsUpdate = true;
+
+        this.#fftHistoryTexture = new THREE.DataTexture(this.#audio.fftHistory, this.#audio.fftHistoryWidth, this.#audio.fftHistoryHeight, THREE.RedFormat);
+        this.#fftHistoryTexture.needsUpdate = true;
+        this.#fftHistoryTexture.minFilter = THREE.LinearFilter;
+        this.#fftHistoryTexture.magFilter = THREE.LinearFilter;
+        this.#fftHistoryTexture.wrapS = THREE.ClampToEdgeWrapping;
+        this.#fftHistoryTexture.wrapT = THREE.RepeatWrapping;
     }
 
 
@@ -177,6 +164,9 @@ export default class Visualizer {
 
             uWaveform : { value : this.#waveformTexture },
             uSpectrum : { value : this.#fftTexture },
+            
+            uFFTHistory         : { value : this.#fftHistoryTexture },
+            uFFTHistoryOffset   : { value : 0 },
 
             uResolution : {
                 value : new THREE.Vector2(
@@ -284,25 +274,18 @@ export default class Visualizer {
      * @private
      */
     #animate(time) {
-
         // AudioAnalyzer reutiliza sus TypedArrays; se copian sus primeras (fftSize / 2)
         // muestras a buffers persistentes de DataTexture antes de subirlos a GPU.
         this.#audio.update();
 
         const Tam = this.#audio.fftSize * 0.5;
 
-        this.#waveformTexture.image.data.set(
-            this.#audio.waveform.subarray(
-                0,
-                Tam
-            )
-        );
-
+        this.#waveformTexture.image.data.set(this.#audio.waveform.subarray(0, Tam));
         this.#waveformTexture.needsUpdate = true;
-
         this.#fftTexture.image.data.set(this.#audio.spectrum.subarray(0, Tam));
-
         this.#fftTexture.needsUpdate = true;
+        this.#fftHistoryTexture.needsUpdate = true;
+        this.#uniforms.uFFTHistoryOffset.value = this.#audio.fftHistoryWriteRow / this.#audio.fftHistoryHeight;
 
         // Los uniforms escalares se actualizan en el mismo frame que las
         // texturas para que el shader lea una instantánea coherente del audio.

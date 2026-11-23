@@ -8,18 +8,87 @@ varying vec2 vUv;
 
 // Tiempo global de animacion y dimensiones actuales del render.
 uniform float uTime;
+
+// Resolucion
 uniform vec2 uResolution;
 
-// Niveles normalizados por banda y envolventes de deteccion de beats.
-uniform float uBass;
-uniform float uMid;
-uniform float uTreble;
+// Energía global del espectro completo (0..1).
+// Útil para brillo general, intensidad de efectos o reactividad global.
 uniform float uVolume;
+
+// Energía media de frecuencias graves (20-250 Hz).
+// Adecuado para movimientos lentos, escalado y deformaciones amplias.
+uniform float uBass;
+
+// Energía media de frecuencias medias (250 Hz-4 kHz).
+// Suele contener gran parte de instrumentos melódicos y voces.
+uniform float uMid;
+
+// Energía media de frecuencias agudas (4-16 kHz).
+// Útil para detalles rápidos, destellos y partículas.
+uniform float uTreble;
+
+// Transitorio de graves normalizado (0..1).
+// Genera pulsos cuando los graves aumentan bruscamente.
+// Ideal para disparar eventos visuales sincronizados con el ritmo.
 uniform float uBeat;
+
+// Transitorio de medios normalizado (0..1).
+// Detecta incrementos rápidos en las frecuencias medias.
 uniform float uMidBeat;
+
+// Transitorio de agudos normalizado (0..1).
+// Detecta incrementos rápidos en las frecuencias altas.
 uniform float uTrebleBeat;
 
-// Texturas 1D (1024 muestras): espectro de frecuencias y forma de onda.
+// ------------------------------------------------------------------
+// Análisis musical orientado a instrumentos.
+// Todos los valores están normalizados aproximadamente a 0..1.
+// Son señales continuas suavizadas, no pulsos instantáneos.
+// ------------------------------------------------------------------
+
+// Energía asociada al bombo (aprox. 40-100 Hz).
+// Ideal para pulsaciones, escalado global y expansión de estructuras.
+uniform float uKick;
+
+// Energía asociada a la caja (aprox. 150-300 Hz).
+// Útil para actividad rítmica secundaria y animaciones percusivas.
+uniform float uSnare;
+
+// Energía asociada a voces e instrumentos predominantes
+// de la zona media (aprox. 500-3000 Hz).
+// Funciona bien para deformaciones orgánicas y variaciones cromáticas.
+uniform float uVoice;
+
+// Energía asociada a platos, hi-hats y contenido brillante
+// (aprox. 6-12 kHz).
+// Muy útil para partículas, chispas y microdetalle.
+uniform float uHiHat;
+
+// ------------------------------------------------------------------
+// Peaks musicales.
+// Todos los valores están normalizados entre 0 y 1.
+// Representan eventos rápidos y transitorios, no energía sostenida.
+// Ideales para flashes, pulsos y efectos instantáneos.
+// ------------------------------------------------------------------
+
+// Pico de energía del bombo.
+// Suele coincidir con el impacto principal del ritmo.
+uniform float uKickPeak;
+
+// Pico de energía de la caja.
+// Muy útil para destellos cortos y respuestas percusivas.
+uniform float uSnarePeak;
+
+// Pico de energía asociado a voces prominentes.
+// Adecuado para activar efectos localizados o actividad neuronal.
+uniform float uVoicePeak;
+
+// Pico de energía asociado a platos y hi-hats.
+// Ideal para generar chispas, partículas y efectos de alta frecuencia.
+uniform float uHiHatPeak;
+
+// Texturas 1D : espectro de frecuencias y forma de onda.
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
@@ -67,19 +136,16 @@ uniform sampler2D uWaveform;
 
 // Valor pseudoaleatorio estable para cada indice de particula. Al no depender
 // del tiempo, cada aguja conserva su angulo, distancia y color entre frames.
-float particleHash(float value)
-{
+float particleHash(float value) {
     return fract(sin(value * 127.1 + 311.7) * 43758.5453);
 }
 
 // Paleta ciclica de colores saturados, desplazada por una fase temporal.
-vec3 vividPalette(float phase)
-{
+vec3 vividPalette(float phase) {
     return 0.5 + 0.5 * cos(TAU * (phase + vec3(0.0, 0.333, 0.667)));
 }
 
-void main()
-{
+void main() {
     // Limitar las entradas de audio evita valores fuera del rango esperado.
     float time = max(uTime, 0.0);
     float bass = clamp(uBass, 0.0, 1.0);
@@ -95,12 +161,12 @@ void main()
         0.0,
         1.0
     );
-    float hueCycle = fract(time * 0.035);
-    float beatStrength = clamp(beat + midBeat + trebleBeat, 0.0, 1.5);
+    float hueCycle = fract(time * 0.035 + uVoice * 0.12);
+    float beatStrength = clamp(uKickPeak + uSnarePeak + uHiHatPeak, 0.0, 1.5);
 
     // Suma de los tres detectores de beat. Se normaliza a 0..1 para
     // controlar de forma estable el pulso del radio de los anillos.
-    float ringBeatSum = clamp(beat + midBeat + trebleBeat, 0.0, 3.0);
+    float ringBeatSum = clamp(uKickPeak + uSnarePeak + uHiHatPeak, 0.0, 3.0);
     float ringBeatPulse = ringBeatSum / 3.0;
 
     vec3 bassBeatColor = vividPalette(hueCycle);
@@ -156,20 +222,16 @@ void main()
 
     // El espectro se distribuye alrededor de la circunferencia; el exponente
     // da mas resolucion visual a las frecuencias bajas.
-    float spectrum = texture2D(
-        uSpectrum,
-        vec2(pow(angle01, 1.35), 0.0)
-    ).r;
+    float spectrum = texture2D(uSpectrum, vec2(pow(angle01, 1.35), 0.0)).r;
     spectrum = clamp(spectrum, 0.0, 1.0);
 
     // Interseccion del rayo con la pared. La forma de onda, los graves y los
     // tres tipos de beat deforman el radio, pero nunca invierten el avance.
     float wallRadius = BASE_WALL_RADIUS
-                     + waveform * (0.11 + bass * 0.055) * (1.0 - barPanel)
-                     + bass * 0.025
-                     + beat * 0.07
-                     + midBeat * 0.035
-                     + trebleBeat * 0.025;
+                    + waveform * (0.11 + uKick * 0.08) * (1.0 - barPanel)
+                    + uKick * 0.04
+                    + uKickPeak * 0.06
+                    + uSnarePeak * 0.02;
     float radialRay = max(length(rayDirection.xy), 0.04);
     float hitDistance = wallRadius / radialRay;
     vec3 wallPosition = rayDirection * hitDistance;
@@ -177,8 +239,7 @@ void main()
 
     // Anillos estructurales desplazados ligeramente hacia el fondo del túnel.
     // El radio reacciona a la suma de beat, midBeat y trebleBeat.
-    float ringRadius = BASE_WALL_RADIUS
-                     + ringBeatPulse * RING_RADIUS_PULSE;
+    float ringRadius = BASE_WALL_RADIUS + ringBeatPulse * RING_RADIUS_PULSE + uKickPeak * 0.08;
     float staticRingHitDistance = ringRadius / radialRay;
 
     float staticTunnelZ = rayDirection.z * staticRingHitDistance
@@ -322,7 +383,8 @@ void main()
 
     // Aro y brillo del portal frontal; su radio pulsa suavemente con graves y
     // beats, y el punto central aporta una referencia de profundidad.
-    float portalRadius = 0.085 + beat * 0.018 + bass * 0.012;
+    float portalRadius = 0.085 + uKickPeak * 0.025 + uKick * 0.01;
+
     float portalRing = exp(-pow((screenRadius - portalRadius) / 0.012, 2.0));
     color += cyan * portalRing * (0.35 + beat * 1.8 + midBeat * 0.8);
     color += vec3(0.75, 0.9, 1.0) * exp(-screenRadius * 34.0)
@@ -330,7 +392,7 @@ void main()
 
     // La esfera central crece con cualquiera de los tres detectores de beat.
     // Cada banda aporta su propio color y su energia de emision.
-    float sphereBeatStrength = beatStrength;
+    float sphereBeatStrength = clamp(uKickPeak + uSnarePeak * 0.7 + uVoicePeak * 0.3, 0.0, 1.5);
     float sphereRadius = 0.038 + sphereBeatStrength * 0.024;
     vec2 spherePosition = screen / sphereRadius;
     float sphereDistanceSquared = dot(spherePosition, spherePosition);
@@ -370,19 +432,18 @@ void main()
     );
     color += beatEmission * sphereHalo * 4.5;
     color += vec3(1.0) * sphereHalo * sphereBeatStrength * 0.8;
+    color += vividPalette(hueCycle + 0.25) * uVoicePeak * sphereHalo * 1.8;
 
     // Campo de agujas. Cada indice recibe una posicion inicial estable dentro
     // de un tramo profundo del tunel; al restar el avance, se acerca a camara.
-    float beatDrive = clamp(beat * 0.8 + midBeat * 0.65 + trebleBeat * 0.5, 0.0, 1.5);
+    float beatDrive = clamp(uKickPeak * 1.0 + uSnarePeak * 0.8 + uHiHatPeak * 0.4, 0.0, 1.5);
     
-    for (int particleIndex = 0; particleIndex < PARTICLE_COUNT; particleIndex++)
-    {
+    for (int particleIndex = 0; particleIndex < PARTICLE_COUNT; particleIndex++) {
         float seed = particleHash(float(particleIndex) + 7.31);
         float particleAngle = TAU * fract(seed * 13.17);
         float particleRadius = 0.12 + fract(seed * 21.73) * 1.22;
         float particleStartZ = fract(seed * 37.17) * PARTICLE_DEPTH;
-        float particleZ = 0.45
-                        + mod(particleStartZ - forwardTravel * PARTICLE_SPEED, PARTICLE_DEPTH);
+        float particleZ = 0.45 + mod(particleStartZ - forwardTravel * PARTICLE_SPEED, PARTICLE_DEPTH);
 
         // Proyeccion perspectiva: al acercarse a Z=0, las agujas se desplazan
         // hacia fuera y aumentan de tamano. Su posicion queda dentro del tunel.
@@ -472,8 +533,8 @@ void main()
     }
 
     // Vigneta, tonemapping exponencial y correccion gamma para la salida final.
-    float vignette = 1.0 - smoothstep(0.72, 1.75, screenRadius);
-    color *= vignette;
+//    float vignette = 1.0 - smoothstep(0.72, 1.75, screenRadius);
+//    color *= vignette;
     color = 1.0 - exp(-color * (1.25 + audioEnergy * 0.35));
     color = pow(max(color, 0.0), vec3(1.0 / 2.2));
 

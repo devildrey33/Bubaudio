@@ -38,7 +38,7 @@ export default class AudioAnalyzer {
     // Peso de la muestra nueva al actualizar los niveles públicos. Corresponde
     // a un suavizado exponencial: valores mayores responden más rápido, pero
     // dejan pasar más variación entre frames.
-    static SMOOTHING = 1.5;
+    static SMOOTHING = 0.5;
 
     // El detector mantiene una referencia lenta del nivel habitual de cada banda.
     // Se actualiza una vez por frame; un valor bajo evita que esa referencia
@@ -80,6 +80,21 @@ export default class AudioAnalyzer {
 
     // Número de muestras de la FFT. El analizador produce fftSize / 2 bins.
     #fftSize;
+
+    // =========================================================================
+    // Historial FFT
+    // =========================================================================
+
+    // Nº de fotogramas guardados en el histórico
+    #fftHistoryHeight = 256;
+
+    // Buffer lineal:
+    // x = frecuencia
+    // y = tiempo
+    #fftHistory;
+
+    // Posición actual del ring buffer
+    #fftHistoryWriteRow = 0;    
 
     // Niveles suavizados que consumen los medidores y los shaders.
     #bass       = 0;
@@ -136,6 +151,8 @@ export default class AudioAnalyzer {
     // URL temporal asociada al Blob del archivo actualmente cargado.
     #blobUrl = null;
 
+
+
     /**
      * Crea el grafo de reproducción y los buffers del analizador.
      *
@@ -167,6 +184,10 @@ export default class AudioAnalyzer {
         // frequencyBinCount y el número de muestras temporales son fftSize / 2.
         this.#fftData = new Uint8Array(fftSize / 2);
         this.#timeData = new Uint8Array(fftSize / 2);
+
+        this.#fftHistory = new Uint8Array(
+          this.#fftData.length * this.#fftHistoryHeight
+        );
     }
 
 
@@ -347,6 +368,7 @@ export default class AudioAnalyzer {
 
         // Estos métodos escriben en los TypedArrays proporcionados.
         this.#analyser.getByteFrequencyData(this.#fftData);
+        this.#updateFftHistory();
         this.#analyser.getByteTimeDomainData(this.#timeData);
 
         // Medias normalizadas de los bins que corresponden a cada intervalo Hz.
@@ -612,6 +634,7 @@ export default class AudioAnalyzer {
         return this.#timeData;
     }
 
+    // Estos gets solo se utilizan para el modo DEBUG
     get kick()      { return this.#kick; }
     get snare()     { return this.#snare; }
     get voice()     { return this.#voice; }
@@ -734,4 +757,20 @@ export default class AudioAnalyzer {
     get fftSize() {
         return this.#fftSize;
     }
+
+
+    #updateFftHistory() {
+        const width = this.#fftData.length;
+
+        const offset = this.#fftHistoryWriteRow * width;
+
+        this.#fftHistory.set(this.#fftData, offset);
+
+        this.#fftHistoryWriteRow = (this.#fftHistoryWriteRow + 1) % this.#fftHistoryHeight;
+    }    
+
+    get fftHistory()            { return this.#fftHistory; }
+    get fftHistoryWriteRow()    { return this.#fftHistoryWriteRow; }
+    get fftHistoryWidth()       { return this.#fftData.length;}
+    get fftHistoryHeight()      { return this.#fftHistoryHeight;}    
 }

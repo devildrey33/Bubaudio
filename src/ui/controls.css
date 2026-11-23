@@ -379,12 +379,13 @@ body {
     position: fixed;
 
     left: 0;
-    top: 0;
+    top: 10%;
+    bottom : 10%;
 
     width: 10%;
     height: 100vh;
 
-    z-index: 1100;
+    z-index: 1102;
 }
 
 

@@ -1,14 +1,14 @@
 const LEVELS = [
 
     // Bandas generales
+    { key: "volume",    label: "Volumen" },
     { key: "bass",      label: "Graves" },
     { key: "mid",       label: "Medios" },
     { key: "treble",    label: "Agudos" },
-    { key: "volume",    label: "Volumen" },
     // Detector de transitorios original
-    { key: "beat",      label: "Beat G" },
-    { key: "midBeat",   label: "Beat M" },
-    { key: "trebleBeat",label: "Beat A" },
+    { key: "beat",      label: "▲ Graves" },
+    { key: "midBeat",   label: "▲ Medios" },
+    { key: "trebleBeat",label: "▲ Agudos" },
 
     // Bandas musicales
     { key: "kick",      label: "Bombo" },
@@ -17,10 +17,10 @@ const LEVELS = [
     { key: "hihat",     label: "Charles" },
 
     // Picos instantáneos
-    { key: "kickPeak",  label: "Bombo ▲" },
-    { key: "snarePeak", label: "Caja ▲" },
-    { key: "voicePeak", label: "Voz ▲" },
-    { key: "hihatPeak", label: "Charles ▲" }
+    { key: "kickPeak",  label: "▲ Bombo" },
+    { key: "snarePeak", label: "▲ Caja" },
+    { key: "voicePeak", label: "▲ Voz" },
+    { key: "hihatPeak", label: "▲ Charles" }
 ];
 
 
@@ -33,6 +33,9 @@ export default class AudioDebugPanel {
     #fpsValue;
     #lastFrameTime = null;
     #fps = 0;
+    #collapsed = false
+    #toggleButton;
+    #content;
 
     constructor(audio) {
 
@@ -43,18 +46,58 @@ export default class AudioDebugPanel {
 
         const title = document.createElement("div");
         title.className = "audio-debug-title";
-        title.textContent = "Niveles de audio";
+
+        const leftSide = document.createElement("div");
+        leftSide.className = "audio-debug-header-left";
+
+        this.#toggleButton = document.createElement("button");
+        this.#toggleButton.className = "audio-debug-toggle";
+        this.#toggleButton.textContent = "▼";
+
+        this.#toggleButton.addEventListener("click", () => this.#toggle());
+
+        const titleText = document.createElement("span");
+        titleText.textContent = "Niveles de audio";
+
+        leftSide.append(
+            this.#toggleButton,
+            titleText
+        );
+
+        const fpsContainer = document.createElement("span");
+        fpsContainer.className = "audio-debug-fps";
+
+        this.#fpsValue = document.createElement("span");
+        this.#fpsValue.className = "audio-debug-fps-value";
+        this.#fpsValue.textContent = "--";
+
+        const fpsLabel = document.createElement("span");
+        fpsLabel.className = "audio-debug-fps-label";
+        fpsLabel.textContent = " fps";
+
+        fpsContainer.append(
+            this.#fpsValue,
+            fpsLabel
+        );
+
+        title.append(
+            leftSide,
+            fpsContainer
+        );
+
         this.#container.appendChild(title);
 
+        this.#content = document.createElement("div");
+        this.#content.className = "audio-debug-content";
+
         for (const level of LEVELS) {
-            this.#container.appendChild(
+            this.#content.appendChild(
                 this.#createLevelRow(level)
             );
         }
 
-        this.#container.appendChild(
-            this.#createFpsRow()
-        );
+        this.#container.appendChild(this.#content);
+        
 
         document.body.appendChild(this.#container);
         this.#update();
@@ -100,24 +143,17 @@ export default class AudioDebugPanel {
         return row;
     }
 
-    #createFpsRow() {
+    #toggle() {
+        this.#collapsed = !this.#collapsed;
 
-        const row = document.createElement("div");
-        row.className = "audio-debug-stat";
+        this.#toggleButton.textContent =
+            this.#collapsed ? "►" : "▼";
 
-        const label = document.createElement("span");
-        label.className = "audio-debug-label";
-        label.textContent = "FPS";
-
-        this.#fpsValue = document.createElement("span");
-        this.#fpsValue.className = "audio-debug-value";
-        this.#fpsValue.textContent = "--";
-
-        row.append(label, this.#fpsValue);
-
-        return row;
+        this.#content.classList.toggle(
+            "collapsed",
+            this.#collapsed
+        );
     }
-
 
     #update(time = performance.now()) {
 
@@ -140,13 +176,18 @@ export default class AudioDebugPanel {
             if (frameDuration > 0) {
                 const currentFps = 1000 / frameDuration;
                 this.#fps += (currentFps - this.#fps) * 0.2;
-                this.#fpsValue.textContent = String(Math.round(this.#fps));
+                const fps = Math.round(this.#fps);
+
+                this.#fpsValue.textContent = fps;
+
+                const fpsNormalized = Math.max(0, Math.min(1, (fps - 10) / 50));
+                const hue = fpsNormalized * 120;
+
+                this.#fpsValue.style.color = `hsl(${hue}deg 100% 50%)`;
             }
         }
 
         this.#lastFrameTime = time;
-        this.#animationFrame = requestAnimationFrame(
-            (frameTime) => this.#update(frameTime)
-        );
+        this.#animationFrame = requestAnimationFrame((frameTime) => this.#update(frameTime));
     }
 }
