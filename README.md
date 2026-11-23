@@ -111,6 +111,9 @@ Implementado:
 - [x] Reproducción desde NAS
 - [x] Paneles de biblioteca y cola
 - [x] Visualizador GLSL
+  - [x] Detectar agudos medios y graves
+  - [x] Detectar bombo, caja, voz y charles
+  - [x] Espectrograma
 - [x] Selector de shaders
 
 TODO FIRST (usar ia como si fuera un patito de goma que encima tiene la osiadia de contestar y dar su opinion) : 
