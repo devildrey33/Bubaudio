@@ -10,6 +10,7 @@ Actualmente el proyecto se encuentra en desarrollo activo.
 
 ## Descarga
 
+Puedes descargar el instalador de Bubaudio 0.5.2 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
 - [Bubaudio 0.5.2 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.2_x64_en-US.zip)
 ---
 
@@ -112,23 +113,47 @@ Implementado:
 - [x] Visualizador GLSL
 - [x] Selector de shaders
 
-En desarrollo:
+TODO FIRST (usar ia como si fuera un patito de goma que encima tiene la osiadia de contestar y dar su opinion) : 
+// Buenos temas de charla para copilot del windows 11, y ya de paso preguntar por el fftSize.
+- DILEMA!!! que accion deberia tener la rueda de ratón en general : { 
+ - visualización REACTIVA (por ejemplo zoom camara o lo que le programe)
+            o
+ - SUBIR / BAJAR VOLUMEN absolutamente siempre...
+}
 
-- [NO NEED GHC] Revisar por que no va el enlace de descarga del github
-- [ ] Añadir favoritos a la cola 
-- [ ] Drag & Drop desde el reproductor a una nueva cola
+- DILEMA2!! : Es posible calcular los BPM de la canción antes de los 10 primeros segundos, es decir ON THE FLY?, y si es posible ajustar los Beat para que los tiempos maximos se sincronizen con los BPM como minimo... (ahora mismo los beats de los shaders tienen un tiempo mínimo que a mi parecer es incorrecto y rompre muchas visualizaciones al no estar sincronizado, y deberia ajustarse a los bpm de la cancion, o por lo menos a un multiple)
+  Un problema claro es que los beats tienen un mínimo de vida que en muchas ocasiones puede ser excesivo al ser superior a un beat de la canción que se esta reproduciendo, lo que al sumar varios beats acaba des-sincronizando una bateria / bajo marcados. Y este comportamiento hace que se deje pulsaciones, o que las haga de forma desincronizada. Por ello el mínimo debe ser un múltiple de los beats de la canción que está sonando, o es imposible que los efectos se ajusten realmente a la canción. Pero claro esto solo es posible si sabemos los bpm de la canción.
+
+  O quizas simplemtente habria que elimizar el delimitador del codigo y permitir varios efectos de beat incluso con 10ms de diferencia, que tambien es la opcion que a simple vista es mas facil.
+
+    - Esto abre una opcion a tener los BPM calculados, pero no se si es mejor hacer siempre el calculo on FLY a los 5 / 10 segundos, o guardarlo en la BD... tal y como lo escribo... si soy capaz ed hacerlo on FLY, ya me adapto que es lo mas fácil... aunque por otro lado tambien quedaría COOL saber los bpm y guardar-los / mostrarlos...
+
+
+
+En desarrollo (TODO) : 
+SOLUCIONAR DILEMAS ANTES DE CONTINUAR
 - [ ] Actualizaciones automáticas
 - [ ] Busqueda en la librería
 - [ ] Ecualizador
-- [ ] Visualizador de escenas Threejs 
-- [ ]  - Utilizar nueva version de THREE.js
-- [ ]  - TSL 
-- [ ]  - Reactivo al mouse / rueda
+- [ ] Visualizador de escenas complejas Threejs (ahora mismo es un three.js con un plano2D simple)
+- [ ]  - Utilizar nueva API de THREE.js (uff si yo me he enterado hace 2 dias... no auguro nada facil el cambio... pero es ULTRA necesario para TSL)
+- [ ]  - TSL (SUPER IMPORTANTE PARA ESCENAS MAS DETALLADAS)
+- [ ]  - Reactivo al mouse x, y, clicks, y talvez la rueda del raton
 - [ ]  - Opciones de depuración para cada shader (he pensado en un lector de fragments que sustituya las macros por uniforms si está en modo debug)
 - [ ]  - Decidir fftSize, o añadir una opcion para modificar el fftSize 
+- [ ] Eventos mouse y teclado
+- [ ]  - supongo que lo mejor seria abstenerse en la queue y la library
+- [ ]  - controlar volumen con la rueda del raton, tambien con + y -, y mostrar el nivel de volumen discretamente en la visualización
+- [ ]  - Espacio = play / pausa, definir teclas de cancion adelante / atras.
+- [ ]  - tecla para lista aleatoria
+- [ ]  - Opciones -> teclado
+- [ ] Añadir opcion para saltar al siguiente shader en X segundos, y checkbox en el panel de shaders.
+- [ ] Añadir favoritos a la cola en el menu del botón nueva cola aleatória
+- [ ] Drag & Drop desde el explorador al reproductor a una nueva cola (problemon si no esta añadida la ruta en la librería, en RAVE acabe añadiendo la ruta a la lista de rutas de las librerias de audio (y descartandola en caso de tener una ruta superior), pero... ya veremos si vale la pena.... yo ya me entiendo xd)
 - [ ] Historial de modificaciones en la queue (control + z / y)
 - [ ] Metadatos ID3
 - [ ] Carátulas
+- [ ] Shader de hipnosapo con publicidad subliminal 3d que me ayudara a dominar el mundo. JAQUE MATE CABRONES
 
 
 ---

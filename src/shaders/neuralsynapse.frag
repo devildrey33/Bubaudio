@@ -12,6 +12,16 @@ uniform float uBeat;
 uniform float uMidBeat;
 uniform float uTrebleBeat;
 
+uniform float uKick;
+uniform float uSnare;
+uniform float uVoice;
+uniform float uHiHat;
+// Los peaks van de 0 a 1
+uniform float uKickPeak;
+uniform float uSnarePeak;
+uniform float uVoicePeak;
+uniform float uHiHatPeak;
+
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
@@ -21,19 +31,15 @@ uniform sampler2D uWaveform;
 //==========================================================
 
 #define WAVE_HEIGHT         0.5
-#define WAVE_WIDTH          0.006
+#define WAVE_WIDTH          0.016
 #define WAVE_GLOW_SIZE      2.0
 #define WAVE_GLOW_INTENSITY 0.03
-#define WAVE_INTENSITY      4.0
-
+#define WAVE_INTENSITY      8.0
 
 #define NETWORK_SCALE       9.0
 #define NETWORK_REACTION    2.0
 
 #define BG_DISTORTION       0.015
-
-#define CLOUD_SCALE         4.0
-#define CLOUD_INTENSITY     0.30
 
 #define SPARKS_INTENSITY    0.6
 
@@ -105,10 +111,6 @@ void main() {
 
     p.x *= uResolution.x / uResolution.y;
 
-    float low  = spectrum(0.05);
-    float mid  = spectrum(0.50);
-    float high = spectrum(0.95);
-
     float waveform = 0.0;
 
     waveform += texture2D(uWaveform, vec2(uv.x - 0.004, 0.0)).r;
@@ -119,26 +121,17 @@ void main() {
 
     waveform *= 0.2;
 
-    p *= rotate(
-        uTime * 0.02 +
-        uTreble * 0.04
-    );
+    p *= rotate(uTime * 0.02 + uTreble * 0.04);
 
-    p += vec2(
-        sin(uTime + p.y * 3.0),
-        cos(uTime + p.x * 3.0)
-    ) * waveform * BG_DISTORTION;
+    p += vec2(sin(uTime + p.y * 3.0), cos(uTime + p.x * 3.0)) * waveform * BG_DISTORTION;
 
-    float networkScale =
-        NETWORK_SCALE +
-        uBass * NETWORK_REACTION;
+    float networkScale = NETWORK_SCALE + uKick * NETWORK_REACTION + uKickPeak * 1.5;
 
     vec2 gridPos = p * networkScale;
     vec2 id = floor(gridPos);
     vec2 gv = fract(gridPos) - 0.5;
 
     float membranes = 0.0;
-    float nuclei = 0.0;
 
     float smallCells = 0.0;
     float mediumCells = 0.0;
@@ -157,35 +150,19 @@ void main() {
 
             vec2 local = node - (id + gv);
 
-            float seed =
-                hash(id + offset) * 20.0;
+            float seed = hash(id + offset) * 20.0;
 
-            float sizeRnd =
-                hash(id + offset + vec2(17.0));
+            float sizeRnd = hash(id + offset + vec2(17.0));
 
-            float angle =
-                atan(local.y, local.x);
+            float angle = atan(local.y, local.x);
 
-            float radius =
-                length(local);
+            float radius = length(local);
 
-            float breathing =
-                sin(
-                    uTime *
-                    (1.0 + uBass * 2.0) +
-                    seed
-                ) * 0.02;
+            float breathing = sin(uTime * (1.0 + uKick * 2.0) + seed) * 0.02 + uVoice * 0.03;
 
-            float wobble =
-                sin(angle * 5.0 + seed + uTime * 0.5) * 0.03 +
-                sin(angle * 9.0 - seed * 2.0) * 0.02;
+            float wobble = sin(angle * 5.0 + seed + uTime * 0.5) * 0.03 + sin(angle * 9.0 - seed * 2.0) * 0.02;
 
-            float dendrites =
-                smoothstep(
-                    0.7,
-                    1.0,
-                    sin(angle * 18.0 + seed)
-                );
+            float dendrites = smoothstep(0.7, 1.0, sin(angle * 18.0 + seed));
 
             float baseRadius;
 
@@ -199,41 +176,14 @@ void main() {
                 baseRadius = CELL_LARGE_SIZE;
             }
 
-            float cellRadius =
-                baseRadius +
-                wobble +
-                breathing;
+            float cellRadius = baseRadius + wobble + breathing;
+            float membrane = 1.0 - smoothstep(cellRadius, cellRadius + 0.025, radius);
 
-            float membrane =
-                1.0 -
-                smoothstep(
-                    cellRadius,
-                    cellRadius + 0.025,
-                    radius
-                );
+            membrane += dendrites * smoothstep(cellRadius, cellRadius + 0.05, radius) * 0.4;
 
-            membrane +=
-                dendrites *
-                smoothstep(
-                    cellRadius,
-                    cellRadius + 0.05,
-                    radius
-                ) * 0.4;
+            float nucleus = 1.0 - smoothstep(0.0, baseRadius * 0.45, radius);
 
-            float nucleus =
-                1.0 -
-                smoothstep(
-                    0.0,
-                    baseRadius * 0.45,
-                    radius
-                );
-
-            float pulse =
-                sin(
-                    uTime *
-                    (2.0 + uBass * 4.0) +
-                    seed
-                ) * 0.5 + 0.5;
+            float pulse = sin(uTime * (2.0 + uKick * 5.0 + uVoice * 2.0) + seed) * 0.5 + 0.5;
 
             if(sizeRnd < 0.33) {
                 smallCells += membrane;
@@ -249,161 +199,94 @@ void main() {
             }
 
             membranes += membrane;
-            nuclei += nucleus * pulse;
         }
     }
 
-    float cloud =
-        fbm(
-            p *
-            (
-                CLOUD_SCALE +
-                low
-            )
-        );
+    float sceneRadius = length(p);
 
-    cloud +=
-        fbm(
-            p * 8.0 +
-            uTime * 0.1
-        ) * CLOUD_INTENSITY;
+    float core = exp(-sceneRadius * 12.0);
 
-    float sceneRadius =
-        length(p);
+    core *= 0.8 + uKick * 3.0;
+    core += uKickPeak * 0.4;
 
-    float core =
-        exp(
-            -sceneRadius * 12.0
-        );
+    float activity = max(sin(uTime * (8.0 + uVoice * 15.0 + uHiHat * 10.0) - membranes * 20.0), 0.0);
 
-    core *=
-        (
-            0.8 +
-            uBass * 3.0
-        );
+    float sparks = pow(max(0.0, fbm(p * 30.0 + uTime * 3.0)), 24.0);
 
-    core +=
-        uBeat * 0.5;
+    sparks *= SPARKS_INTENSITY * (0.08 + uHiHat * 0.8 + uHiHatPeak * 1.5);
 
-    float activity =
-        max(
-            sin(
-                uTime *
-                (8.0 + uTreble * 20.0) -
-                membranes * 20.0
-            ),
-            0.0
-        );
+    float synapse = pow(max(0.0, fbm(p * 16.0 + uTime * 0.4 + uVoice * 4.0)), 6.0);
+    float snareFlash = pow(uSnarePeak, 2.5);
 
-    float sparks =
-        pow(
-            max(
-                0.0,
-                fbm(
-                    p * 30.0 +
-                    uTime * 3.0
-                )
-            ),
-            14.0
-        );
-
-    sparks *=
-        high *
-        SPARKS_INTENSITY *
-        (
-            1.0 +
-            uTrebleBeat
-        );
-
-    vec3 col =
-        vec3(
-            0.005,
-            0.010,
-            0.030
-        );
+    vec3 col = vec3(0.005, 0.010, 0.030);
 
     // Células pequeñas
-    col += vec3(0.05,0.20,0.90) * smallCells * 0.55;
+    col += vec3(0.05,0.20,0.90) * smallCells * (0.25 + uHiHat * 0.4);
     col += vec3(0.45,0.70,1.00) * smallNuclei;
 
     // Células medianas
-    col += vec3(0.45,0.15,1.00) * mediumCells * 0.45;
+    col += vec3(0.45,0.15,1.00) * mediumCells * (0.30 + uVoice);
     col += vec3(0.80,0.60,1.00) * mediumNuclei;
 
     // Células grandes
-    col += vec3(0.90,0.15,0.70) * largeCells * 0.35;
+    col += vec3(0.90,0.15,0.70) * largeCells * (0.25 + uKick + uKickPeak * 2.0);
     col += vec3(1.00,0.75,0.90) * largeNuclei;
 
+    // synapse
+    col += vec3(0.35,0.80,1.00) * synapse * uVoicePeak * 0.6;
+    // flash de la caja
+    col += vec3(0.3,0.7,1.0) * snareFlash * membranes * 0.35;
+
     // Actividad neuronal
-    col += vec3(0.5,0.7,1.0) *
-       activity *
-       0.15;
+    col += vec3(0.5,0.7,1.0) * activity *  0.15;
 
     // Beat
-    col += vec3(0.3,0.9,1.0) *
-           uBeat *
-           membranes;
+    col += vec3(0.3,0.9,1.0) * uKickPeak * membranes * 0.75;
 
     // Núcleo central
-    col += vec3(0.15,0.75,1.0) *
-           core;
+    col += vec3(0.15,0.75,1.0) * core;
 
     // Chispas
     col += vec3(1.0) * sparks;
 
-    //======================================================
+    ///======================================================
     // WAVEFORM
     //======================================================
 
-    float centeredWave =
-        (waveform - 0.5) *
-        WAVE_HEIGHT +
-        0.5;
+    float centeredWave = (waveform - 0.5) * WAVE_HEIGHT + 0.5;
 
-    float waveLine =
-        1.0 -
-        smoothstep(
-            0.0,
-            WAVE_WIDTH,
-            abs(
-                uv.y -
-                centeredWave
-            )
-        );
+    float waveInner = 1.0 - smoothstep(0.0, WAVE_WIDTH, abs(uv.y - centeredWave));
+    float waveOuter = 1.0 - smoothstep(0.0, WAVE_WIDTH * 2.5, abs(uv.y - centeredWave));
+    float waveGlow  = 1.0 - smoothstep(0.0, WAVE_WIDTH * WAVE_GLOW_SIZE, abs(uv.y - centeredWave));
 
-    float waveGlow =
-        1.0 -
-        smoothstep(
-            0.0,
-            WAVE_WIDTH *
-            WAVE_GLOW_SIZE,
-            abs(
-                uv.y -
-                centeredWave
-            )
-        );
+    float waveOutline = max(0.0, waveOuter - waveInner);
 
-    col +=
-        vec3(
-            0.0,
-            0.6,
-            1.0
-        ) *
-        waveGlow *
-        WAVE_GLOW_INTENSITY;
+    float waveR = 1.0 - smoothstep(0.0, WAVE_WIDTH, abs(uv.y - (centeredWave + 0.0035)));
+    float waveG = waveInner;
+    float waveB = 1.0 - smoothstep(0.0, WAVE_WIDTH, abs(uv.y - (centeredWave - 0.0035)));
 
-    col +=
-        vec3(1.0) *
-        waveLine *
-        WAVE_INTENSITY;
+    // Borde negro para destacar sobre fondos brillantes
+    col = mix(col, vec3(0.0), waveOutline * 0.85);
 
-    float vignette =
-        1.0 -
-        smoothstep(
-            0.75,
-            1.5,
-            sceneRadius
-        );
+    // Glow principal
+    col += vec3(0.0, 1.0, 0.0) * waveGlow * 0.20;
+
+    // Línea principal
+    vec3 waveColor = vec3(1.0, 1.0, 0.0);
+    col = mix(col, waveColor, clamp(waveInner * 2.0, 0.0, 1.0));
+
+    // Aberración cromática sutil
+    col += vec3(waveR * 0.25, 0.0, waveB * 0.25);
+
+    // Realce con bombos
+    col += vec3(0.0, 0.6, 0.0) * waveInner * uKickPeak;
+
+    vec2 edge = abs(uv - 0.5) * 2.0;
+
+    float vignetteX = 1.0 - smoothstep(0.65, 1.0, edge.x);
+    float vignetteY = 1.0 - smoothstep(0.65, 1.0, edge.y);
+
+    float vignette = vignetteX * vignetteY;
 
     col *= vignette;
 

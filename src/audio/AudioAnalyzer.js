@@ -50,11 +50,13 @@ export default class AudioAnalyzer {
 
     // Además del mínimo anterior, exige que la subida tenga tamaño relativo
     // respecto al nivel habitual de la banda.
-    static TRANSIENT_RELATIVE_THRESHOLD = 0.15;
+    static TRANSIENT_RELATIVE_THRESHOLD = 0.05; 
+//    static TRANSIENT_RELATIVE_THRESHOLD = 0.25; 
 
     // El detector vuelve a quedar armado cuando la subida cae por debajo de
     // esta fracción del umbral. Esta histéresis evita repetir un pulso en cada frame.
-    static TRANSIENT_REARM_RATIO = 0.5;
+    static TRANSIENT_REARM_RATIO = 0.05;
+//    static TRANSIENT_REARM_RATIO = 0.5;
 
 
     // Contexto y nodos de Web Audio API:
@@ -80,36 +82,55 @@ export default class AudioAnalyzer {
     #fftSize;
 
     // Niveles suavizados que consumen los medidores y los shaders.
-    #bass = 0;
-
-    #mid = 0;
-
-    #treble = 0;
-
-    #volume = 0;
-
-    #beat = 0;
-
-    #midBeat = 0;
-
+    #bass       = 0;
+    #mid        = 0;
+    #treble     = 0;
+    #volume     = 0;
+    #beat       = 0;
+    #midBeat    = 0;
     #trebleBeat = 0;
 
     // Referencias lentas usadas para medir subidas, no el volumen absoluto.
-    #bassBaseline = 0;
-
-    #midBaseline = 0;
-
+    #bassBaseline   = 0;
+    #midBaseline    = 0;
     #trebleBaseline = 0;
+
+    // =========================================================================
+    // Bandas musicales específicas
+    // =========================================================================
+    #kick = 0;              // Bombo (40-100 Hz).
+    #snare = 0;             // Caja (150-300 Hz).
+    #voice = 0;             // Voz principal (500-3000 Hz).
+    #hihat = 0;             // Platos / HiHat (6000-12000 Hz).
+
+
+    // =========================================================================
+    // Envolventes Attack / Release
+    // =========================================================================
+
+    // Seguimiento rápido/subida y lento/bajada para estabilizar.
+    #kickEnv = 0;
+    #snareEnv = 0;
+    #voiceEnv = 0;
+    #hihatEnv = 0;
+
+    // =========================================================================
+    // Picos transitorios musicales
+    // =========================================================================
+
+    // Pulsos instantáneos ideales para shaders.
+    #kickPeak = 0;
+    #snarePeak = 0;
+    #voicePeak = 0;
+    #hihatPeak = 0;    
 
     // Impide interpretar la primera muestra como una subida desde cero.
     #hasTransientBaseline = false;
 
     // Cada detector solo produce un pulso mientras la señal permanezca por
     // encima del umbral; se rearma cuando la subida se relaja.
-    #bassTransientArmed = true;
-
-    #midTransientArmed = true;
-
+    #bassTransientArmed   = true;
+    #midTransientArmed    = true;
     #trebleTransientArmed = true;
 
     // URL temporal asociada al Blob del archivo actualmente cargado.
@@ -275,6 +296,38 @@ export default class AudioAnalyzer {
         }
     }
 
+    /**
+     * Aplica un envolvente Attack/Release a una señal.
+     *
+     * Las subidas y bajadas no se procesan a la misma velocidad:
+     *
+     * - Attack: velocidad utilizada cuando la señal aumenta.
+     * - Release: velocidad utilizada cuando la señal disminuye.
+     *
+     * Esto permite reaccionar rápidamente a transitorios (bombos,
+     * cajas, golpes, etc.) sin que la señal caiga bruscamente entre
+     * frames, produciendo un resultado mucho más estable para
+     * animaciones, shaders y efectos visuales.
+     *
+     * @param {number} current  Valor actual de la envolvente.
+     * @param {number} target   Nuevo valor medido.
+     * @param {number} attack   Factor de subida (0..1).
+     * @param {number} release  Factor de bajada (0..1).
+     *
+     * @returns {number} Valor actualizado de la envolvente.
+     */
+    #envelope(current, target, attack, release) {
+
+        // Si la señal está subiendo, aplicar el factor de ataque
+        // para acercarse rápidamente al nuevo valor.
+        if (target > current) {
+            return current + (target - current) * attack;
+        }
+        // Si la señal está bajando, aplicar el factor de liberación
+        // para que la caída sea más suave y estable.
+        return current + (target - current) * release;
+    }
+
 
     /**
      * Lee una nueva muestra de audio y actualiza todos los valores públicos.
@@ -303,15 +356,34 @@ export default class AudioAnalyzer {
         const treble = this.#averageBand(AudioAnalyzer.TREBLE_MIN, AudioAnalyzer.TREBLE_MAX);
         const volume = this.#computeVolume();
 
+
+        // ---------------------------------------------------------
+        // Bandas musicales específicas
+        // ---------------------------------------------------------
+
+        const kick = this.#averageBand(40, 100);
+        const snare = this.#averageBand(150, 300);
+        const voice = this.#averageBand(500, 3000);
+        const hihat = this.#averageBand(6000, 12000);     
+                
+        // ---------------------------------------------------------
+        // Attack / Release envelope
+        //
+        // Attack rápido para capturar golpes.
+        // Release lento para estabilizar la señal.
+        // ---------------------------------------------------------
+
+        this.#kickEnv = this.#envelope(this.#kickEnv, kick, 0.65, 0.04);
+        this.#snareEnv = this.#envelope(this.#snareEnv, snare, 0.65, 0.04);
+        this.#voiceEnv = this.#envelope(this.#voiceEnv, voice, 0.65, 0.04);
+        this.#hihatEnv = this.#envelope(this.#hihatEnv, hihat, 0.65, 0.04);        
+
         // Suavizado exponencial: cada nivel retiene el 80% del valor anterior
         // y añade el 20% de la muestra nueva. Así se reducen vibraciones en UI
         // sin imponer el mismo retardo al detector de transitorios.
         this.#bass += (bass - this.#bass) * AudioAnalyzer.SMOOTHING;
-
         this.#mid += (mid - this.#mid) * AudioAnalyzer.SMOOTHING;
-
         this.#treble += (treble - this.#treble) * AudioAnalyzer.SMOOTHING;
-
         this.#volume += (volume - this.#volume) * AudioAnalyzer.SMOOTHING;
 
         // La referencia lenta permite detectar cambios respecto al nivel
@@ -323,10 +395,19 @@ export default class AudioAnalyzer {
             this.#hasTransientBaseline = true;
         }
 
+        // ---------------------------------------------------------
+        // Valores suavizados para shaders
+        // ---------------------------------------------------------
+
+        this.#kick += (this.#kickEnv - this.#kick) * AudioAnalyzer.SMOOTHING;
+        this.#snare += (this.#snareEnv - this.#snare) * AudioAnalyzer.SMOOTHING;
+        this.#voice += (this.#voiceEnv - this.#voice) * AudioAnalyzer.SMOOTHING;
+        this.#hihat += (this.#hihatEnv - this.#hihat) * AudioAnalyzer.SMOOTHING;        
+
         // Solo interesan subidas; las bajadas se usan para permitir que el
         // detector vuelva a armarse.
-        const bassChange = Math.max(0, bass - this.#bassBaseline);
-        const midChange = Math.max(0, mid - this.#midBaseline);
+        const bassChange   = Math.max(0, bass   - this.#bassBaseline);
+        const midChange    = Math.max(0, mid    - this.#midBaseline);
         const trebleChange = Math.max(0, treble - this.#trebleBaseline);
 
         // El umbral es el mayor entre un suelo absoluto de ruido y una fracción
@@ -383,6 +464,26 @@ export default class AudioAnalyzer {
         this.#bassBaseline   += (bass - this.#bassBaseline)     * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
         this.#midBaseline    += (mid - this.#midBaseline)       * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
         this.#trebleBaseline += (treble - this.#trebleBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
+
+
+        // ---------------------------------------------------------
+        // Transitorios musicales
+        //
+        // Detecta aumentos rápidos respecto a la envolvente.
+        // ---------------------------------------------------------
+        const kickTransient = Math.max(0, kick - this.#kickEnv);
+        const snareTransient = Math.max(0, snare - this.#snareEnv);
+        const voiceTransient = Math.max(0, voice - this.#voiceEnv);
+        const hihatTransient = Math.max(0, hihat - this.#hihatEnv);
+
+        // ---------------------------------------------------------
+        // Peaks para shaders
+        // ---------------------------------------------------------
+
+        this.#kickPeak = Math.max(kickTransient, this.#kickPeak * 0.90);
+        this.#snarePeak = Math.max(snareTransient, this.#snarePeak * 0.90);
+        this.#voicePeak = Math.max(voiceTransient, this.#voicePeak * 0.90);
+        this.#hihatPeak = Math.max(hihatTransient, this.#hihatPeak * 0.90);
 
         // Atenúa los pulsos en cada frame hasta que regresan a cero.
         this.#beat *= 0.92;
@@ -510,6 +611,17 @@ export default class AudioAnalyzer {
     get waveform() {
         return this.#timeData;
     }
+
+    get kick()      { return this.#kick; }
+    get snare()     { return this.#snare; }
+    get voice()     { return this.#voice; }
+    get hihat()     { return this.#hihat; }
+    // Estos valores van de 0 a 1, y para que se vean bien en el DebugPanel los multiplico por 100
+    get kickPeak()  { return this.#kickPeak * 100; }
+    get snarePeak() { return this.#snarePeak * 100; }
+    get voicePeak() { return this.#voicePeak * 100; }
+    get hihatPeak() { return this.#hihatPeak * 100; }
+
 
     /**
      * Libera los recursos del analizador y la URL del Blob.

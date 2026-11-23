@@ -1,11 +1,26 @@
 const LEVELS = [
-    { key: "bass", label: "Graves" },
-    { key: "beat", label: "Beat G" },
-    { key: "mid", label: "Medios" },
-    { key: "midBeat", label: "Beat M" },
-    { key: "treble", label: "Agudos" },
-    { key: "trebleBeat", label: "Beat A" },
-    { key: "volume", label: "Volumen" }
+
+    // Bandas generales
+    { key: "bass",      label: "Graves" },
+    { key: "mid",       label: "Medios" },
+    { key: "treble",    label: "Agudos" },
+    { key: "volume",    label: "Volumen" },
+    // Detector de transitorios original
+    { key: "beat",      label: "Beat G" },
+    { key: "midBeat",   label: "Beat M" },
+    { key: "trebleBeat",label: "Beat A" },
+
+    // Bandas musicales
+    { key: "kick",      label: "Bombo" },
+    { key: "snare",     label: "Caja" },
+    { key: "voice",     label: "Voz" },
+    { key: "hihat",     label: "Charles" },
+
+    // Picos instantáneos
+    { key: "kickPeak",  label: "Bombo ▲" },
+    { key: "snarePeak", label: "Caja ▲" },
+    { key: "voicePeak", label: "Voz ▲" },
+    { key: "hihatPeak", label: "Charles ▲" }
 ];
 
 

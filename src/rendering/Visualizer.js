@@ -63,17 +63,11 @@ export default class Visualizer {
      * @param {AudioAnalyzer} audio Analizador que alimentará el visualizador.
      */
     constructor(audio) {
-
         this.#audio = audio;
-
         this.#createScene();
-
         this.#createTextures();
-
         this.#createUniforms();
-
         this.#createMaterial();
-
         this.#registerEvents();
     }
 
@@ -157,50 +151,32 @@ export default class Visualizer {
     #createUniforms() {
 
         this.#uniforms = {
+            uTime   : { value : 0 },
+            uFrame  : { value : 0 },
+            uVolume : { value : 0 },
 
-            uTime : {
-                value : 0
-            },
+            uBass   : { value : 0 },
+            uMid    : { value : 0 },
+            uTreble : { value : 0 },
 
-            uFrame : {
-                value : 0
-            },
+            uBeat       : { value : 0 },
+            uMidBeat    : { value : 0 },
+            uTrebleBeat : { value : 0 },
 
-            uBass : {
-                value : 0
-            },
+            // Bandas musicales específicas
+            uKick  : { value : 0 },
+            uSnare : { value : 0 },
+            uVoice : { value : 0 },
+            uHiHat : { value : 0 },
 
-            uMid : {
-                value : 0
-            },
+            // Transitorios / picos
+            uKickPeak : { value : 0 },
+            uSnarePeak : { value : 0 },
+            uVoicePeak : { value : 0 },
+            uHiHatPeak : { value : 0 },
 
-            uTreble : {
-                value : 0
-            },
-
-            uVolume : {
-                value : 0
-            },
-
-            uBeat : {
-                value : 0
-            },
-
-            uMidBeat : {
-                value : 0
-            },
-
-            uTrebleBeat : {
-                value : 0
-            },
-
-            uWaveform : {
-                value : this.#waveformTexture
-            },
-
-            uSpectrum : {
-                value : this.#fftTexture
-            },
+            uWaveform : { value : this.#waveformTexture },
+            uSpectrum : { value : this.#fftTexture },
 
             uResolution : {
                 value : new THREE.Vector2(
@@ -255,7 +231,6 @@ export default class Visualizer {
      * @private
      */
     #registerEvents() {
-
         window.addEventListener(
             "resize",
             () => this.#onResize()
@@ -340,6 +315,16 @@ export default class Visualizer {
         this.#uniforms.uBeat.value          = this.#audio.beat;
         this.#uniforms.uMidBeat.value       = this.#audio.midBeat;
         this.#uniforms.uTrebleBeat.value    = this.#audio.trebleBeat;
+
+        this.#uniforms.uKick.value = this.#audio.kick;
+        this.#uniforms.uSnare.value = this.#audio.snare;
+        this.#uniforms.uVoice.value = this.#audio.voice;
+        this.#uniforms.uHiHat.value = this.#audio.hihat;
+
+        this.#uniforms.uKickPeak.value = this.#audio.kickPeak;
+        this.#uniforms.uSnarePeak.value = this.#audio.snarePeak;
+        this.#uniforms.uVoicePeak.value = this.#audio.voicePeak;
+        this.#uniforms.uHiHatPeak.value = this.#audio.hihatPeak;        
 
         this.#renderer.render(
             this.#scene,
