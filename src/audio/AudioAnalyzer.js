@@ -38,7 +38,7 @@ export default class AudioAnalyzer {
     // Peso de la muestra nueva al actualizar los niveles públicos. Corresponde
     // a un suavizado exponencial: valores mayores responden más rápido, pero
     // dejan pasar más variación entre frames.
-    static SMOOTHING = 0.5;
+    static SMOOTHING = 0.2;
 
     // El detector mantiene una referencia lenta del nivel habitual de cada banda.
     // Se actualiza una vez por frame; un valor bajo evita que esa referencia
@@ -55,7 +55,7 @@ export default class AudioAnalyzer {
 
     // El detector vuelve a quedar armado cuando la subida cae por debajo de
     // esta fracción del umbral. Esta histéresis evita repetir un pulso en cada frame.
-    static TRANSIENT_REARM_RATIO = 0.05;
+    static TRANSIENT_REARM_RATIO = 0.25;
 //    static TRANSIENT_REARM_RATIO = 0.5;
 
 

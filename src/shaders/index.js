@@ -3,7 +3,7 @@ import fullscreen    from "./fullscreen.vert?raw";
 import plasma        from "./plasma.frag?raw";
 import tunnel        from "./tunnel.frag?raw";
 import barras        from "./barras.frag?raw";
-import galaxy        from "./galaxy.frag?raw";
+import espectrograma from "./espectrograma.frag?raw";
 import dualoscy      from "./dualoscy.frag?raw";
 import liquidorb     from "./liquidorb.frag?raw";
 import barras3d      from "./barras3d.frag?raw";
@@ -26,7 +26,7 @@ const shaders = [
     { name : "Living Orb",   fragment : livingorb    },
     { name : "Living Orb 2", fragment : livingorb2   },
     { name : "Living Orb 3", fragment : livingorb3   },
-    { name : "Galaxy",       fragment : galaxy       },
+    { name : "Espectrograma",       fragment : espectrograma       },
     { name : "Dual Oscy",    fragment : dualoscy     },
     { name : "Liquid Orb",   fragment : liquidorb    },
     { name : "Dual Wave",    fragment : dualwaveform },
