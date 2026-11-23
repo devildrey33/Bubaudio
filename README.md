@@ -121,12 +121,7 @@ TODO FIRST (usar ia como si fuera un patito de goma que encima tiene la osiadia 
  - SUBIR / BAJAR VOLUMEN absolutamente siempre...
 }
 
-- DILEMA2!! : Es posible calcular los BPM de la canción antes de los 10 primeros segundos, es decir ON THE FLY?, y si es posible ajustar los Beat para que los tiempos maximos se sincronizen con los BPM como minimo... (ahora mismo los beats de los shaders tienen un tiempo mínimo que a mi parecer es incorrecto y rompre muchas visualizaciones al no estar sincronizado, y deberia ajustarse a los bpm de la cancion, o por lo menos a un multiple)
-  Un problema claro es que los beats tienen un mínimo de vida que en muchas ocasiones puede ser excesivo al ser superior a un beat de la canción que se esta reproduciendo, lo que al sumar varios beats acaba des-sincronizando una bateria / bajo marcados. Y este comportamiento hace que se deje pulsaciones, o que las haga de forma desincronizada. Por ello el mínimo debe ser un múltiple de los beats de la canción que está sonando, o es imposible que los efectos se ajusten realmente a la canción. Pero claro esto solo es posible si sabemos los bpm de la canción.
-
-  O quizas simplemtente habria que elimizar el delimitador del codigo y permitir varios efectos de beat incluso con 10ms de diferencia, que tambien es la opcion que a simple vista es mas facil.
-
-    - Esto abre una opcion a tener los BPM calculados, pero no se si es mejor hacer siempre el calculo on FLY a los 5 / 10 segundos, o guardarlo en la BD... tal y como lo escribo... si soy capaz ed hacerlo on FLY, ya me adapto que es lo mas fácil... aunque por otro lado tambien quedaría COOL saber los bpm y guardar-los / mostrarlos...
+- DILEMA2!! : Es posible calcular los BPM de la canción? Me resultaria util?
 
 
 
