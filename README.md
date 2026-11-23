@@ -81,19 +81,6 @@ Puedes descargar el instalador de Bubaudio 0.5.2 en formato zip, el cual incluye
 
 ---
 
-## NOTAS para el desarrollador
-### Para actualizar la versión del reproductor
-
-Usa el script para sincronizar la versión de npm, Tauri y Cargo en un solo paso:
-
-```powershell
-npm.cmd run set-version -- 0.5.1
-```
-
-Sustituye `0.5.1` por la nueva versión semántica. El comando actualiza los manifiestos y los archivos de bloqueo.
-
----
-
 ## Estado actual
 
 Implementado:
@@ -205,6 +192,19 @@ Actualmente Bubaudio detecta:
 ## Objetivo del proyecto
 
 Bubaudio nace como un reproductor orientado a usuarios que mantienen grandes colecciones de música local y desean una experiencia rápida, ligera y altamente visual, sin depender de servicios de streaming.
+
+---
+
+## NOTAS para el desarrollador
+### Para actualizar la versión del reproductor
+
+Usa el script para sincronizar la versión de npm, Tauri y Cargo en un solo paso:
+
+```powershell
+npm.cmd run set-version -- 0.5.1
+```
+
+Sustituye `0.5.1` por la nueva versión semántica. El comando actualiza los manifiestos y los archivos de bloqueo.
 
 ---
 
