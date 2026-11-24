@@ -105,12 +105,6 @@ Implementado:
   - [x] Flux y centroid
 - [x] Selector de shaders
 
-TODO FIRST - DILEMAS A SOLVENTAR CON LA IA
-- DILEMA2!! : Es posible calcular los BPM de la canción? Me resultaria util?...
-  - En proceso ahora ya he creado incluso un espectrograma, y tambien soporte para peaks de caja bombo voz y charles
-
-  
-
 
 
 En desarrollo (TODO) : 
@@ -120,6 +114,7 @@ SOLUCIONAR DILEMAS ANTES DE CONTINUAR
 - [ ] Añadir url de internet a la queue (hay que vigilar porque actualmente abro las canciones del HD mediante un blob)
 - [ ]  - DILEMA!! : Seria muy complicado hacer listas con spotify y o algun otro servicio de streaming de audio?
 - [ ] Ecualizador
+- [ ]  - Volver a probar el tema de los BPM
 - [ ] Visualizador de escenas complejas Threejs (ahora mismo es un three.js con un plano2D simple)
 - [ ]  - Utilizar nueva API de THREE.js (uff si yo me he enterado hace 2 dias... no auguro nada facil el cambio... pero es ULTRA necesario para TSL)
 - [ ]  - TSL (SUPER IMPORTANTE PARA ESCENAS MAS DETALLADAS)

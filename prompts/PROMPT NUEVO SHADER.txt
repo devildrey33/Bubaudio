@@ -1,0 +1,311 @@
+Estoy desarrollando Bubaudio, un reproductor musical basado en WebAudio, Three.js y GLSL.
+
+Necesito que generes un fragment shader completamente nuevo para una visualización reactiva al audio.
+
+--------------------------------------------------
+OBJETIVO GENERAL
+--------------------------------------------------
+
+Diseña una visualización artística, profesional y creativa.
+
+No quiero una simple demostración técnica ni un shader genérico de ejemplo.
+
+La visualización debe transmitir sensación de sincronización musical y dar la impresión de que entiende la música, no solamente que reacciona al volumen.
+
+Busca conceptos visuales originales.
+
+Evita usar como concepto principal:
+
+- Plasmas genéricos
+- Fractales clásicos
+- Kaleidoscopios
+- Ruido FBM como efecto principal
+- Nebulosas genéricas
+- Fondos abstractos sin estructura reconocible
+
+--------------------------------------------------
+FASE DE DISEÑO OBLIGATORIA
+--------------------------------------------------
+
+Antes de escribir el shader, describe brevemente:
+
+- El concepto visual.
+- Qué representa.
+- Cómo reaccionan visualmente:
+    - Kick
+    - Snare
+    - Voice
+    - HiHat
+- Cómo se utilizan:
+    - Spectrum
+    - Waveform
+    - FFTHistory
+
+Limita esta explicación a 5-10 líneas.
+
+--------------------------------------------------
+REQUISITOS VISUALES
+--------------------------------------------------
+
+El shader debe contener:
+
+- Un elemento principal claramente reconocible.
+- Capas secundarias de detalle.
+- Profundidad visual.
+- Variación cromática.
+- Movimiento continuo.
+- Microdetalle visible.
+- Buen aspecto tanto con música tranquila como intensa.
+
+Debe seguir siendo legible durante picos de energía elevados.
+
+Evita que toda la pantalla se vuelva completamente blanca o saturada cuando aumente la energía musical.
+
+--------------------------------------------------
+REACTIVIDAD MUSICAL
+--------------------------------------------------
+
+Asigna responsabilidades diferentes a cada señal.
+
+Kick:
+- Estructuras principales.
+- Expansiones.
+- Escalado global.
+- Pulsaciones fuertes.
+
+Snare:
+- Pulsos secundarios.
+- Destellos rítmicos.
+- Fragmentaciones.
+- Oscilaciones rápidas.
+
+Voice:
+- Deformaciones orgánicas.
+- Desplazamientos.
+- Evolución de formas.
+- Variaciones cromáticas.
+
+HiHat:
+- Partículas.
+- Chispas.
+- Detalle fino.
+- Actividad de alta frecuencia.
+
+Utiliza también cuando aporten valor:
+
+- uBass
+- uMid
+- uTreble
+- uBeat
+- uMidBeat
+- uTrebleBeat
+- uFlux
+- uCentroid
+
+No uses todos los uniforms únicamente para modificar brillo o escala.
+
+--------------------------------------------------
+FFT OBLIGATORIA
+--------------------------------------------------
+
+Utiliza de forma significativa, no tienes por que usarlos todos :
+
+- uSpectrum
+- uWaveform
+- uFFTHistory
+
+Evita usarlos únicamente para variar luminosidad.
+
+La información espectral debe influir en la estructura visual.
+
+uFFTHistory representa:
+
+- Eje X = frecuencias graves → agudas
+- Eje Y = tiempo histórico
+- Parte superior = muestras más recientes
+- Canal R = amplitud normalizada
+
+--------------------------------------------------
+INTERACCIÓN
+--------------------------------------------------
+
+Si encaja con el concepto visual, utiliza:
+
+- uMouse
+- uMouseDelta
+- uMouseMiddle
+- uMouseRight
+- uMouseButton4
+- uMouseButton5
+
+Pero la visualización debe funcionar correctamente aunque no exista interacción del usuario.
+
+--------------------------------------------------
+CALIDAD DEL CÓDIGO
+--------------------------------------------------
+
+Genera el fragment shader completo.
+
+No devuelvas fragmentos parciales.
+
+El código debe ser:
+
+- Profesional.
+- Compacto.
+- Bien organizado.
+- Bien comentado.
+- Fácil de modificar.
+
+Evita saltos de línea innecesarios.
+
+Prefiero un estilo compacto y legible similar al de shaders escritos manualmente por programadores experimentados.
+
+No expandas operaciones simples en múltiples líneas.
+
+Respeta la coherencia visual y la legibilidad por encima de la complejidad matemática.
+
+--------------------------------------------------
+REQUISITOS TÉCNICOS
+--------------------------------------------------
+
+Incluye obligatoriamente:
+
+- Macros de configuración.
+- Funciones auxiliares reutilizables.
+- Corrección de aspect ratio mediante uResolution.
+- Comentarios explicativos por bloques.
+- Valores agrupados en constantes ajustables.
+
+Crea macros específicas para:
+
+- Intensidades
+- Velocidades
+- Escalas
+- Brillos
+- Colores principales
+- Sensibilidad al audio
+
+--------------------------------------------------
+CRITERIO DE CALIDAD
+--------------------------------------------------
+
+La visualización debe parecer diseñada específicamente para música.
+
+Debe seguir siendo interesante incluso durante pasajes musicales suaves.
+
+Prioriza:
+
+- Originalidad visual.
+- Personalidad artística.
+- Lectura clara de la música.
+- Sincronización musical creíble.
+
+La visualización debe dar sensación de estar viva y evolucionar con la música.
+
+Aprovecha especialmente:
+- uKick
+- uSnare
+- uHiHat
+- uFFTHistory
+- uFlux
+- uCentroid (OJO! la palabra centroid está reservada en GLSL)
+
+Estos uniforms tienen prioridad sobre las señales FFT básicas.
+
+--------------------------------------------------
+UNIFORMS DISPONIBLES
+--------------------------------------------------
+
+/* Coordenadas UV fullscreen 0..1 */
+varying vec2 vUv;
+
+/* Tiempo global */
+uniform float uTime;
+
+/* Resolución del render */
+uniform vec2 uResolution;
+
+/* Energía global */
+uniform float uVolume;
+
+/* Bandas principales */
+uniform float uBass;
+uniform float uMid;
+uniform float uTreble;
+
+/* Beats por bandas */
+uniform float uBeat;
+uniform float uMidBeat;
+uniform float uTrebleBeat;
+
+/* Peaks por bandas */
+uniform float uBassPeak;
+uniform float uMidPeak;
+uniform float uTreblePeak;
+
+/* Instrumentos detectados */
+uniform float uKick;
+uniform float uSnare;
+uniform float uVoice;
+uniform float uHiHat;
+
+/* Peaks de instrumentos */
+uniform float uKickPeak;
+uniform float uSnarePeak;
+uniform float uVoicePeak;
+uniform float uHiHatPeak;
+
+/* FFT */
+uniform sampler2D uSpectrum;
+
+/* Forma de onda */
+uniform sampler2D uWaveform;
+
+/* Espectrograma histórico */
+uniform sampler2D uFFTHistory;
+uniform float uFFTHistoryOffset;
+
+/* Descriptores espectrales */
+uniform float uFlux;
+uniform float uCentroid;
+
+/* Ratón */
+uniform vec2 uMouse;
+uniform vec2 uMouseDelta;
+uniform float uMouseMiddle;
+uniform float uMouseRight;
+uniform float uMouseButton4;
+uniform float uMouseButton5;
+
+/*
+uSpectrum:
+X = frecuencias graves -> agudas
+R = amplitud
+
+uWaveform:
+X = tiempo
+R = señal de audio
+
+uFFTHistory:
+X = frecuencia
+Y = histórico temporal
+Parte superior = muestras recientes
+R = amplitud
+*/
+
+/*
+BPM (actualmente no implementado)
+
+uniform float uBPM;
+uniform float uBeatPhase;
+*/
+
+--------------------------------------------------
+RESULTADO ESPERADO
+--------------------------------------------------
+
+1. Explica primero el concepto visual.
+2. Describe brevemente cómo utiliza las señales musicales.
+3. Genera el fragment shader completo.
+4. Incluye comentarios útiles.
+5. Devuelve únicamente GLSL válido y listo para usar en Three.js.

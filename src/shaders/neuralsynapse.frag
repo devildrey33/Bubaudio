@@ -25,6 +25,9 @@ uniform float uHiHatPeak;
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
+uniform sampler2D uFFTHistory;
+//uniform float uFFTHistoryOffset;
+
 
 //==========================================================
 // CONFIG
@@ -54,6 +57,19 @@ float hash(vec2 p) {
 
 float spectrum(float x) {
     return texture2D(uSpectrum, vec2(clamp(x,0.0,1.0),0.0)).r;
+}
+
+float spectrumHistory(float x, float y) {
+    return texture2D(
+        uFFTHistory,
+        vec2(clamp(x, 0.0, 1.0), clamp(y, 0.0, 1.0))
+    ).r;
+}
+
+float spectrumTrend(float x) {
+    float current = spectrumHistory(x, 0.0);
+    float old = spectrumHistory(x, 0.75);
+    return current - old;
 }
 
 mat2 rotate(float a) {
@@ -122,6 +138,9 @@ void main() {
     waveform *= 0.2;
 
     p *= rotate(uTime * 0.02 + uTreble * 0.04);
+    float networkMemory = spectrumHistory(0.5, 0.5);
+
+    p += vec2(sin(uTime * 0.3 + p.y * 2.0), cos(uTime * 0.3 + p.x * 2.0)) * networkMemory * 0.10;
 
     p += vec2(sin(uTime + p.y * 3.0), cos(uTime + p.x * 3.0)) * waveform * BG_DISTORTION;
 
@@ -141,6 +160,20 @@ void main() {
     float mediumNuclei = 0.0;
     float largeNuclei = 0.0;
 
+    float lowEnergy = (spectrum(0.04) + spectrum(0.08) + spectrum(0.12)) * 0.333;
+    float midEnergy = (spectrum(0.30) + spectrum(0.40) + spectrum(0.50)) * 0.333;
+    float highEnergy = (spectrum(0.75) + spectrum(0.85) + spectrum(0.95)) * 0.333;
+    float bassTrend = (spectrumTrend(0.08) + spectrumTrend(0.12)) * 0.5;
+    float midTrend = (spectrumTrend(0.35) + spectrumTrend(0.45)) * 0.5;
+    float trebleTrend = (spectrumTrend(0.80) + spectrumTrend(0.95)) * 0.5;
+
+    float subBass = (spectrum(0.01) + spectrum(0.02) + spectrum(0.03)) * 0.333;
+
+    float bassCells = 0.0;
+    float midCells = 0.0;
+    float trebleCells = 0.0;
+    float ghostNuclei = 0.0;
+
     for(int y = -1; y <= 1; y++) {
         for(int x = -1; x <= 1; x++) {
 
@@ -151,6 +184,29 @@ void main() {
             vec2 local = node - (id + gv);
 
             float seed = hash(id + offset) * 20.0;
+            // Cada neurona escucha una zona distinta del espectro
+            float freqPos = fract(seed * 0.073);
+            vec3 neuronFreqColor = mix(vec3(0.10,0.30,1.00), vec3(1.00,0.20,0.60), freqPos);
+            float freqEnergy = spectrum(freqPos);
+
+            float h0 = spectrumHistory(freqPos, 0.00);
+            float h1 = spectrumHistory(freqPos, 0.12);
+            float h2 = spectrumHistory(freqPos, 0.24);
+            float h3 = spectrumHistory(freqPos, 0.36);
+            float h4 = spectrumHistory(freqPos, 0.48);
+            float h5 = spectrumHistory(freqPos, 0.60);
+            float h6 = spectrumHistory(freqPos, 0.72);
+            float h7 = spectrumHistory(freqPos, 0.84);
+
+            float neuronMemory = (h0 + h1 + h2 + h3 + h4 + h5 + h6 + h7) * 0.125;
+            
+//            float neuronActivity = smoothstep(0.25, 0.55, neuronMemory);
+            float brainRegion = fbm((id + vec2(13.0, 7.0)) * 0.22 + uTime * 0.03);
+            float regionMask = spectrumHistory(fract(id.x * 0.13 + id.y * 0.17), 0.50);
+            float neuronActivity = smoothstep(0.25, 0.55, regionMask);
+            neuronActivity *= smoothstep(0.35, 0.65, brainRegion);
+
+            float freqGrowth = max(h0 - h4, 0.0);
 
             float sizeRnd = hash(id + offset + vec2(17.0));
 
@@ -158,12 +214,11 @@ void main() {
 
             float radius = length(local);
 
-            float breathing = sin(uTime * (1.0 + uKick * 2.0) + seed) * 0.02 + uVoice * 0.03;
+            float breathing = sin(uTime * (1.0 + neuronMemory * 6.0) + seed) * 0.02 + freqGrowth * 0.08;
 
             float wobble = sin(angle * 5.0 + seed + uTime * 0.5) * 0.03 + sin(angle * 9.0 - seed * 2.0) * 0.02;
 
-            float dendrites = smoothstep(0.7, 1.0, sin(angle * 18.0 + seed));
-
+            float dendrites = smoothstep(0.7, 1.0, sin(angle * (18.0 + neuronMemory * 25.0) + seed));
             float baseRadius;
 
             if(sizeRnd < 0.33) {
@@ -176,14 +231,19 @@ void main() {
                 baseRadius = CELL_LARGE_SIZE;
             }
 
-            float cellRadius = baseRadius + wobble + breathing;
-            float membrane = 1.0 - smoothstep(cellRadius, cellRadius + 0.025, radius);
+            float nucleus = (1.0 - smoothstep(0.0, baseRadius * 0.45, radius)) * neuronActivity;
+            float neuronGhost = h4 * 0.35 + h5 * 0.25 + h6 * 0.20 + h7 * 0.20;
+            ghostNuclei += nucleus * neuronGhost * neuronActivity;
+
+            float cellRadius = baseRadius * (1.0 + neuronGhost * 0.5) + wobble + breathing;
+            float membrane = (1.0 - smoothstep(cellRadius, cellRadius + 0.025, radius)) * neuronActivity;
 
             membrane += dendrites * smoothstep(cellRadius, cellRadius + 0.05, radius) * 0.4;
+            membrane *= 0.35;
 
-            float nucleus = 1.0 - smoothstep(0.0, baseRadius * 0.45, radius);
 
-            float pulse = sin(uTime * (2.0 + uKick * 5.0 + uVoice * 2.0) + seed) * 0.5 + 0.5;
+            float pulse = sin(uTime * (2.0 + neuronMemory * 8.0) + seed) * 0.5 + 0.5;
+            pulse *= 0.25 + neuronMemory;
 
             if(sizeRnd < 0.33) {
                 smallCells += membrane;
@@ -199,6 +259,9 @@ void main() {
             }
 
             membranes += membrane;
+            bassCells   += membrane * spectrum(0.10);
+            midCells    += membrane * spectrum(0.40);
+            trebleCells += membrane * spectrum(0.85);
         }
     }
 
@@ -206,31 +269,49 @@ void main() {
 
     float core = exp(-sceneRadius * 12.0);
 
-    core *= 0.8 + uKick * 3.0;
+    core *= 0.8 + subBass * 5.0 + uKickPeak * 1.5;
     core += uKickPeak * 0.4;
 
     float activity = max(sin(uTime * (8.0 + uVoice * 15.0 + uHiHat * 10.0) - membranes * 20.0), 0.0);
 
     float sparks = pow(max(0.0, fbm(p * 30.0 + uTime * 3.0)), 24.0);
 
-    sparks *= SPARKS_INTENSITY * (0.08 + uHiHat * 0.8 + uHiHatPeak * 1.5);
+    sparks *= SPARKS_INTENSITY * (0.05 + highEnergy * 1.5 + max(trebleTrend, 0.0) * 6.0);
 
-    float synapse = pow(max(0.0, fbm(p * 16.0 + uTime * 0.4 + uVoice * 4.0)), 6.0);
+    float synapseHistory = (
+        spectrumHistory(0.10,0.20) +
+        spectrumHistory(0.25,0.30) +
+        spectrumHistory(0.40,0.40) +
+        spectrumHistory(0.55,0.50) +
+        spectrumHistory(0.70,0.60) +
+        spectrumHistory(0.85,0.70)
+    ) * 0.166;
+
+    float synapse = pow(max(0.0, fbm(p * 16.0 + uTime * 0.4 + midEnergy * 8.0)), 6.0);
+    synapse *= 1.0 + max(midTrend, 0.0) * 2.0;
+
+    float neuralBurst = max(bassTrend,0.0) + max(midTrend,0.0) + max(trebleTrend,0.0);
+
     float snareFlash = pow(uSnarePeak, 2.5);
 
     vec3 col = vec3(0.005, 0.010, 0.030);
+    col += vec3(0.4, 0.9, 1.0) * neuralBurst * membranes * 0.6;
 
-    // Células pequeñas
-    col += vec3(0.05,0.20,0.90) * smallCells * (0.25 + uHiHat * 0.4);
+    // Graves
+    col += vec3(0.05,0.30,1.00) * bassCells * (0.2 + lowEnergy * 3.0);
+
+    // Medios
+    col += vec3(0.65,0.20,1.00) * midCells * (0.2 + midEnergy * 3.0);
+
+    // Agudos
+    col += vec3(1.00,0.25,0.65) * trebleCells * (0.2 + highEnergy * 3.0);
+
+    // Núcleos
     col += vec3(0.45,0.70,1.00) * smallNuclei;
-
-    // Células medianas
-    col += vec3(0.45,0.15,1.00) * mediumCells * (0.30 + uVoice);
     col += vec3(0.80,0.60,1.00) * mediumNuclei;
-
-    // Células grandes
-    col += vec3(0.90,0.15,0.70) * largeCells * (0.25 + uKick + uKickPeak * 2.0);
     col += vec3(1.00,0.75,0.90) * largeNuclei;
+    // Memoria histórica
+    //col += vec3(.10,0.60,1.00) * ghostNuclei * 0.02;
 
     // synapse
     col += vec3(0.35,0.80,1.00) * synapse * uVoicePeak * 0.6;
@@ -244,7 +325,12 @@ void main() {
     col += vec3(0.3,0.9,1.0) * uKickPeak * membranes * 0.75;
 
     // Núcleo central
-    col += vec3(0.15,0.75,1.0) * core;
+    col += vec3(0.15,0.75,1.0) * core * 0.75;
+    
+    // Actividad espectral global
+    col += vec3(0.10,0.35,1.00) * lowEnergy  * 0.8;
+    col += vec3(0.60,0.20,1.00) * midEnergy  * 0.6;
+    col += vec3(1.00,0.30,0.60) * highEnergy * 0.5;
 
     // Chispas
     col += vec3(1.0) * sparks;
@@ -253,7 +339,7 @@ void main() {
     // WAVEFORM
     //======================================================
 
-    float centeredWave = (waveform - 0.5) * WAVE_HEIGHT + 0.5;
+    float centeredWave = (waveform - 0.5) * WAVE_HEIGHT + 0.2;
 
     float waveInner = 1.0 - smoothstep(0.0, WAVE_WIDTH, abs(uv.y - centeredWave));
     float waveOuter = 1.0 - smoothstep(0.0, WAVE_WIDTH * 2.5, abs(uv.y - centeredWave));
@@ -269,19 +355,23 @@ void main() {
     col = mix(col, vec3(0.0), waveOutline * 0.85);
 
     // Glow principal
-    col += vec3(0.0, 1.0, 0.0) * waveGlow * 0.20;
+    col += vec3(0.0, 1.0, 1.0) * waveGlow * 0.20;
 
     // Línea principal
-    vec3 waveColor = vec3(1.0, 1.0, 0.0);
+    vec3 waveColor = vec3(1.0, 1.0, 1.0);
     col = mix(col, waveColor, clamp(waveInner * 2.0, 0.0, 1.0));
 
     // Aberración cromática sutil
-    col += vec3(waveR * 0.25, 0.0, waveB * 0.25);
+//    col += vec3(waveR * 0.25, 0.0, waveB * 0.25);
 
     // Realce con bombos
     col += vec3(0.0, 0.6, 0.0) * waveInner * uKickPeak;
 
     vec2 edge = abs(uv - 0.5) * 2.0;
+
+    float memory = spectrumHistory(fract(length(p) * 0.4), 0.85);
+    col += vec3(0.15, 0.25, 0.5) * memory * 0.25;    
+
 
     float vignetteX = 1.0 - smoothstep(0.65, 1.0, edge.x);
     float vignetteY = 1.0 - smoothstep(0.65, 1.0, edge.y);

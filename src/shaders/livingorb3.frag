@@ -1,4 +1,3 @@
-
 precision highp float;
 
 varying vec2 vUv;
@@ -11,6 +10,16 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 uniform float uBeat;
+
+uniform float uVoice;
+uniform float uFlux;
+uniform float uCentroid;
+uniform float uKick;
+uniform float uSnare;
+uniform float uHiHat;
+uniform float uKickPeak;
+uniform float uSnarePeak;
+uniform float uHiHatPeak;
 
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
@@ -129,17 +138,119 @@ vec3 sphereLighting(vec2 p, float r) {
     );
 
     vec3 baseColor = mix(
-        vec3(0.015, 0.12, 0.28),
-        vec3(0.04, 0.42, 0.62),
+        vec3(0.008, 0.085, 0.22),
+        vec3(0.025, 0.34, 0.56),
         diffuse
     );
 
     vec3 result = baseColor * (0.25 + diffuse * 0.85);
 
-    result += vec3(0.12, 0.85, 1.0) * specular * 1.8;
-    result += vec3(0.18, 0.25, 1.0) * fresnel * 0.7;
+    result += vec3(0.08, 0.72, 0.95) * specular * 1.8;
+    result += vec3(0.12, 0.20, 0.92) * fresnel * 0.7;
 
     return result;
+}
+
+// --------------------------------------------------
+// FONDO: NEBULOSA LÍQUIDA Y HALOS RADIALES
+// --------------------------------------------------
+
+vec2 hash2D(vec2 p) {
+    return fract(sin(vec2(
+        dot(p, vec2(127.1, 311.7)),
+        dot(p, vec2(269.5, 183.3))
+    )) * 43758.5453123);
+}
+
+float noise2D(vec2 p) {
+    vec2 cell = floor(p);
+    vec2 local = fract(p);
+    vec2 smoothLocal = local * local * (3.0 - 2.0 * local);
+
+    float a = dot(hash2D(cell), vec2(1.0));
+    float b = dot(hash2D(cell + vec2(1.0, 0.0)), vec2(1.0));
+    float c = dot(hash2D(cell + vec2(0.0, 1.0)), vec2(1.0));
+    float d = dot(hash2D(cell + vec2(1.0, 1.0)), vec2(1.0));
+
+    // Convertimos los hashes vectoriales en valores estables y suaves.
+    a = fract(a);
+    b = fract(b);
+    c = fract(c);
+    d = fract(d);
+
+    return mix(mix(a, b, smoothLocal.x), mix(c, d, smoothLocal.x), smoothLocal.y);
+}
+
+float liquidNoise(vec2 p, float time, float voice, float flux) {
+    vec2 flow = vec2(
+        sin(time * 0.18 + p.y * 1.7),
+        cos(time * 0.15 - p.x * 1.4)
+    ) * (0.08 + voice * 0.10 + flux * 0.06);
+
+    p += flow;
+
+    float value = 0.0;
+    float amplitude = 0.5;
+
+    for (int i = 0; i < 4; i++) {
+        value += noise2D(p) * amplitude;
+        p = p * 2.03 + vec2(4.7, 2.3);
+        amplitude *= 0.5;
+    }
+
+    return value;
+}
+
+vec3 liquidNebula(
+    vec2 p,
+    float time,
+    float bass,
+    float mid,
+    float voice,
+    float flux,
+    float spectralCentroid
+) {
+    vec2 flowP = p * 1.55;
+    flowP += vec2(
+        sin(time * 0.13 + p.y * 2.0),
+        cos(time * 0.11 - p.x * 1.6)
+    ) * (0.10 + voice * 0.12);
+
+    float cloud = liquidNoise(flowP, time, voice, flux);
+    float detail = liquidNoise(flowP * 1.9 + vec2(7.1, 3.4), time * 1.2, voice, flux);
+
+    float mask = smoothstep(0.18, 0.82, cloud);
+    float activity = 0.25 + bass * 0.22 + mid * 0.18 + flux * 0.20;
+
+    vec3 deepBlue = vec3(0.003, 0.008, 0.035);
+    vec3 cyan = vec3(0.012, 0.12, 0.30);
+    vec3 violet = vec3(0.075, 0.022, 0.24);
+    vec3 color = mix(deepBlue, cyan, mask * (0.38 + activity));
+    color = mix(color, violet, detail * (0.10 + spectralCentroid * 0.24));
+
+    return color * (0.28 + mask * 0.42 + activity * 0.18);
+}
+
+vec3 radialHalos(
+    float radius,
+    float time,
+    float bass,
+    float kick,
+    float snare,
+    float volume
+) {
+    float bassHalo = exp(-abs(radius - (0.30 + kick * 0.025)) * 18.0);
+    bassHalo *= 0.10 + bass * 0.34 + kick * 0.30;
+
+    float secondaryRadius = 0.46 + sin(time * 0.55) * 0.012;
+    float snareHalo = exp(-abs(radius - secondaryRadius) * 34.0);
+    snareHalo *= 0.025 + snare * 0.18 + volume * 0.05;
+
+    float outerAtmosphere = exp(-radius * 1.8) * (0.025 + volume * 0.06);
+
+    return vec3(0.025, 0.24, 0.88) * bassHalo +
+           vec3(0.18, 0.045, 0.78) * snareHalo +
+           vec3(0.012, 0.055, 0.26) * outerAtmosphere;
 }
 
 // --------------------------------------------------
@@ -165,8 +276,34 @@ void main() {
     float treble = clamp(uTreble, 0.0, 1.0);
     float volume = clamp(uVolume, 0.0, 1.0);
     float beat = clamp(uBeat, 0.0, 1.0);
+    float voice = clamp(uVoice, 0.0, 1.0);
+    float flux = clamp(uFlux, 0.0, 1.0);
+    float spectralCentroid = clamp(uCentroid, 0.0, 1.0);
+    float kick = clamp(uKick, 0.0, 1.0);
+    float snare = clamp(uSnare, 0.0, 1.0);
+    float hiHat = clamp(uHiHat, 0.0, 1.0);
+    float kickPeak = clamp(uKickPeak, 0.0, 1.0);
+    float snarePeak = clamp(uSnarePeak, 0.0, 1.0);
+    float hiHatPeak = clamp(uHiHatPeak, 0.0, 1.0);
 
-    vec3 color = vec3(0.0);
+    vec3 color = liquidNebula(
+        p,
+        time,
+        bass,
+        mid,
+        voice,
+        flux,
+        spectralCentroid
+    );
+
+    color += radialHalos(
+        radius,
+        time,
+        bass,
+        kick,
+        snare,
+        volume
+    );
 
     // --------------------------------------------------
     // 1. POSICIÓN Y TAMAÑO DEL NÚCLEO
@@ -225,6 +362,13 @@ void main() {
 
         float baseAngle = id * TAU;
 
+        // Alternamos los tentáculos: pares = bombo, impares = caja.
+        float isKickTentacle = 1.0 - step(0.5, mod(fi, 2.0));
+        float isSnareTentacle = 1.0 - isKickTentacle;
+        float impactPeak =
+            kickPeak * isKickTentacle +
+            snarePeak * isSnareTentacle;
+
         float fft = audioSpectrum(
             0.025 + id * 0.78
         );
@@ -238,17 +382,21 @@ void main() {
             0.39 +
             bass * 0.12 +
             fft * 0.09 +
-            beat * 0.045 +
-            wave * 0.025;
+            beat * 0.035 +
+            impactPeak * 0.055 +
+            wave * 0.010;
 
         // Movimiento orgánico.
         float bend =
-            sin(time * 1.2 + fi * 1.7) * 0.18 +
-            mid * 0.15 +
-            wave * 0.12;
+            // Movimiento base amortiguado; el gesto principal llega por peak.
+            sin(time * 0.72 + fi * 1.7) * 0.055 +
+            mid * 0.08 +
+            impactPeak * 0.095 +
+            wave * 0.035;
 
         float secondaryBend =
-            sin(time * 1.8 + fi * 2.4) * 0.075;
+            sin(time * 0.95 + fi * 2.4) * 0.025 +
+            impactPeak * 0.035;
 
         vec2 direction = vec2(
             cos(baseAngle),
@@ -351,8 +499,8 @@ void main() {
 
         float tip = exp(-tipDistance * 65.0);
 
-        frontTips += tip * isFront * (0.4 + fft);
-        backTips += tip * isBack * (0.4 + fft);
+        frontTips += tip * isFront * (0.4 + fft + impactPeak * 0.18);
+        backTips += tip * isBack * (0.4 + fft + impactPeak * 0.18);
 
         // ----------------------------------------------
         // RAMIFICACIÓN SECUNDARIA
@@ -619,19 +767,25 @@ void main() {
         );
 
         float waveRadius =
-            0.57 +
-            waveValue * 0.035 * (0.3 + volume);
+            0.625 +
+            waveValue * (
+                0.044 +
+                volume * 0.024 +
+                hiHat * 0.012 +
+                hiHatPeak * 0.050
+            );
 
         float d = abs(radius - waveRadius);
 
         waveformGlow +=
-            exp(-d * 100.0) *
-            (0.25 + volume * 0.6);
+            exp(-d * (112.0 - hiHatPeak * 28.0)) *
+            (0.38 + volume * 0.72 + hiHatPeak * 1.35);
     }
 
-    color += vec3(0.04, 0.35, 0.9) *
+    // El peak del charles abre y hace destellar el osciloscopio circular.
+    color += vec3(0.035, 0.48, 1.0) *
         waveformGlow *
-        0.3;
+        (0.48 + hiHat * 0.20 + hiHatPeak * 0.72);
 
     // --------------------------------------------------
     // 9. FLASH DE BEAT
@@ -656,14 +810,20 @@ void main() {
         atmosphere *
         (0.08 + volume * 0.12);
 
-    float vignette =
-        1.0 - smoothstep(
-            0.58,
-            0.98,
-            length(p)
-        );
+    float edge = smoothstep(
+        0.46,
+        0.98,
+        length(p)
+    );
 
+    // Viñeta reactiva: los graves cierran ligeramente los bordes
+    // para concentrar la atención en el núcleo y sus tentáculos.
+    float bassVignette = 0.20 + bass * 0.42 + kick * 0.18;
+    float vignette = 1.0 - edge * bassVignette;
     color *= vignette;
+
+    // Contraste cromático muy sutil para conservar saturación sin bloom.
+    color *= vec3(0.94, 1.0, 1.035);
 
     // Tonemapping.
     color = color / (1.0 + color);

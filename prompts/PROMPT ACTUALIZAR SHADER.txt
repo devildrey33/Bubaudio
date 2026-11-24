@@ -1,0 +1,279 @@
+Estoy desarrollando Bubaudio, un reproductor musical basado en WebAudio, Three.js y GLSL.
+
+Voy a proporcionarte un fragment shader ya existente.
+
+Tu trabajo NO es crear una visualización nueva.
+
+Tu objetivo es modernizar el shader para aprovechar el nuevo sistema de análisis musical sin destruir la identidad visual original.
+
+--------------------------------------------------
+OBJETIVO
+--------------------------------------------------
+
+Mantén el aspecto visual, la composición y la personalidad del shader original.
+
+No reescribas el shader desde cero.
+
+No cambies completamente la idea visual.
+
+No sustituyas el efecto principal por otro distinto.
+
+Debes actuar como si estuvieras realizando una actualización de una versión antigua del shader a una versión más avanzada.
+
+--------------------------------------------------
+ANÁLISIS PREVIO OBLIGATORIO
+--------------------------------------------------
+
+Antes de modificar el código:
+
+1. Explica brevemente qué está haciendo el shader.
+2. Identifica los elementos visuales principales.
+3. Identifica qué uniforms de audio utiliza actualmente.
+4. Propón cómo integrar los nuevos uniforms disponibles.
+5. Explica qué mejoras visuales propones.
+
+Mantén esta explicación breve y técnica.
+
+--------------------------------------------------
+REGLAS DE MODIFICACIÓN
+--------------------------------------------------
+
+Conserva:
+
+- Estética general.
+- Colores principales.
+- Estructura visual.
+- Composición.
+- Movimiento base.
+- Personalidad del shader.
+
+Puedes mejorar:
+
+- Reactividad musical.
+- Profundidad visual.
+- Legibilidad.
+- Detalle fino.
+- Organización del código.
+- Rendimiento cuando sea posible.
+
+--------------------------------------------------
+NUEVAS SEÑALES DISPONIBLES
+--------------------------------------------------
+
+Integra cuando sea apropiado:
+
+uKick
+uSnare
+uVoice
+uHiHat
+
+uKickPeak
+uSnarePeak
+uVoicePeak
+uHiHatPeak
+
+uBass
+uMid
+uTreble
+
+uBeat
+uMidBeat
+uTrebleBeat
+
+uBassPeak
+uMidPeak
+uTreblePeak
+
+uFlux
+uCentroid
+
+uSpectrum
+uWaveform
+uFFTHistory
+
+No es obligatorio usar todos.
+
+Utiliza únicamente los que aporten valor real al shader.
+
+--------------------------------------------------
+ASIGNACIÓN RECOMENDADA
+--------------------------------------------------
+
+Kick:
+- Escalado.
+- Expansión de estructuras.
+- Pulsaciones principales.
+
+Snare:
+- Oscilaciones rápidas.
+- Destellos secundarios.
+- Fragmentación visual.
+
+Voice:
+- Variaciones cromáticas.
+- Deformaciones orgánicas.
+- Movimiento fluido.
+
+HiHat:
+- Partículas.
+- Ruido fino.
+- Chispas.
+- Microdetalle.
+
+Flux:
+- Incremento de actividad global.
+- Eventos dinámicos.
+
+Centroid:
+- Variación de paleta.
+- Desplazamiento cromático.
+- Control de nitidez.
+
+FFTHistory:
+- Estelas.
+- Memoria visual.
+- Ecos espectrales.
+
+--------------------------------------------------
+CALIDAD DEL RESULTADO
+--------------------------------------------------
+
+Evita introducir efectos aleatorios sin propósito.
+
+Cada nuevo uniform añadido debe tener una función visual claramente identificable.
+
+La integración debe parecer una evolución natural del shader original.
+
+Debe seguir reconociéndose inmediatamente el shader original.
+
+--------------------------------------------------
+CALIDAD DEL CÓDIGO
+--------------------------------------------------
+
+Devuelve el shader completo.
+
+No devuelvas únicamente fragmentos.
+
+Mantén el estilo del código original siempre que sea posible.
+
+No reformatees innecesariamente.
+
+Respeta la estructura existente.
+
+Mantén nombres de funciones y variables siempre que tenga sentido.
+
+Añade comentarios solamente donde aporten valor.
+
+Evita comentarios redundantes.
+
+--------------------------------------------------
+OPTIMIZACIÓN
+--------------------------------------------------
+
+Elimina:
+
+- Variables sin uso.
+- Uniforms obsoletos.
+- Funciones muertas.
+- Código redundante.
+
+Indica al final:
+
+- Qué uniforms nuevos se han integrado.
+- Qué uniforms antiguos ya no son necesarios.
+- Qué partes del shader se han mejorado.
+
+--------------------------------------------------
+UNIFORMS DISPONIBLES
+--------------------------------------------------
+
+/* Coordenadas UV fullscreen 0..1 */
+varying vec2 vUv;
+
+/* Tiempo global */
+uniform float uTime;
+
+/* Resolución del render */
+uniform vec2 uResolution;
+
+/* Energía global */
+uniform float uVolume;
+
+/* Bandas principales */
+uniform float uBass;
+uniform float uMid;
+uniform float uTreble;
+
+/* Beats por bandas */
+uniform float uBeat;
+uniform float uMidBeat;
+uniform float uTrebleBeat;
+
+/* Peaks por bandas */
+uniform float uBassPeak;
+uniform float uMidPeak;
+uniform float uTreblePeak;
+
+/* Instrumentos detectados */
+uniform float uKick;
+uniform float uSnare;
+uniform float uVoice;
+uniform float uHiHat;
+
+/* Peaks de instrumentos */
+uniform float uKickPeak;
+uniform float uSnarePeak;
+uniform float uVoicePeak;
+uniform float uHiHatPeak;
+
+/* FFT */
+uniform sampler2D uSpectrum;
+
+/* Forma de onda */
+uniform sampler2D uWaveform;
+
+/* Espectrograma histórico */
+uniform sampler2D uFFTHistory;
+uniform float uFFTHistoryOffset;
+
+/* Descriptores espectrales */
+uniform float uFlux;
+uniform float uCentroid;
+
+/* Ratón */
+uniform vec2 uMouse;
+uniform vec2 uMouseDelta;
+uniform float uMouseMiddle;
+uniform float uMouseRight;
+uniform float uMouseButton4;
+uniform float uMouseButton5;
+
+/*
+uSpectrum:
+X = frecuencias graves -> agudas
+R = amplitud
+
+uWaveform:
+X = tiempo
+R = señal de audio
+
+uFFTHistory:
+X = frecuencia
+Y = histórico temporal
+Parte superior = muestras recientes
+R = amplitud
+*/
+
+/*
+BPM (actualmente no implementado)
+
+uniform float uBPM;
+uniform float uBeatPhase;
+*/
+
+
+--------------------------------------------------
+SHADER A MODIFICAR
+--------------------------------------------------
+
+[Pegar aquí el fragment shader completo]
