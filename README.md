@@ -12,7 +12,7 @@ Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para de
 
 ## Descarga
 
-Puedes descargar el instalador de Bubaudio 0.5.2 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
+Puedes descargar el instalador de Bubaudio 0.5.3 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
 - [Bubaudio 0.5.3 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.3_x64_en-US.zip)
 
 ![Bubaudio1](docs/Bubaudio.png)
