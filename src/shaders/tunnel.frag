@@ -91,6 +91,10 @@ uniform float uHiHatPeak;
 // Texturas 1D : espectro de frecuencias y forma de onda.
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
+// Textura 2D : espectrograma 
+uniform sampler2D uFFTHistory;
+// Indice actual del espectrograma
+uniform float uFFTHistoryOffset;
 
 #define PI 3.14159265359
 #define TAU 6.28318530718

@@ -229,53 +229,23 @@ export default class AudioAnalyzer {
         const data = await readFile(path);
 
         // Obtener la extensión sin distinguir mayúsculas y minúsculas.
-        const extension = path
-            .split(".")
-            .pop()
-            ?.toLowerCase();
+        const extension = path.split(".").pop()?.toLowerCase();
 
         let mimeType = "audio/mpeg";
-
         switch (extension) {
-
-            case "flac" :
-                mimeType = "audio/flac";
-                break;
-
-            case "ogg" :
-                mimeType = "audio/ogg";
-                break;
-
-            case "opus" :
-                mimeType = "audio/ogg";
-                break;
-
-            case "wav" :
-                mimeType = "audio/wav";
-                break;
-
-            case "m4a" :
-                mimeType = "audio/mp4";
-                break;
-
-            case "aac" :
-                mimeType = "audio/aac";
-                break;
+            case "flac" : mimeType = "audio/flac";  break;
+            case "ogg"  : mimeType = "audio/ogg";   break;
+            case "opus" : mimeType = "audio/ogg";   break;
+            case "wav"  : mimeType = "audio/wav";   break;
+            case "m4a"  : mimeType = "audio/mp4";   break;
+            case "aac"  : mimeType = "audio/aac";   break;
         }
 
         // El Blob URL permite que HTMLAudioElement cargue los bytes locales
         // como si fueran un recurso reproducible por el navegador.
-        const blob = new Blob(
-            [data],
-            { type : mimeType }
-        );
-
-        this.#blobUrl = URL.createObjectURL(
-            blob
-        );
-
+        const blob = new Blob([data], { type : mimeType });
+        this.#blobUrl = URL.createObjectURL(blob);
         this.#audioElement.src = this.#blobUrl;
-
         this.#audioElement.load();
     }
 
@@ -338,7 +308,6 @@ export default class AudioAnalyzer {
      * @returns {number} Valor actualizado de la envolvente.
      */
     #envelope(current, target, attack, release) {
-
         // Si la señal está subiendo, aplicar el factor de ataque
         // para acercarse rápidamente al nuevo valor.
         if (target > current) {
@@ -578,9 +547,7 @@ export default class AudioAnalyzer {
             return 0;
         }
 
-        return (
-            total / count / 255
-        );
+        return (total / count / 255);
     }
 
 
@@ -658,11 +625,9 @@ export default class AudioAnalyzer {
         this.pause();
 
         if (this.#blobUrl !== null) {
-
             URL.revokeObjectURL(
                 this.#blobUrl
             );
-
             this.#blobUrl = null;
         }
 

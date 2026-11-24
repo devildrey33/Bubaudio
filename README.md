@@ -13,7 +13,7 @@ Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para de
 ## Descarga
 
 Puedes descargar el instalador de Bubaudio 0.5.2 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
-- [Bubaudio 0.5.2 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.2_x64_en-US.zip)
+- [Bubaudio 0.5.3 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.3_x64_en-US.zip)
 
 ![Bubaudio1](docs/Bubaudio.png)
 
@@ -114,12 +114,15 @@ TODO FIRST (usar ia como si fuera un patito de goma que encima tiene la osiadia 
 
 - DILEMA2!! : Es posible calcular los BPM de la canción? Me resultaria util?
 
+- DILEMA3!! : Seria muy complicado hacer listas con spotify y o algun otro servicio de streaming de audio?
+
 
 
 En desarrollo (TODO) : 
 SOLUCIONAR DILEMAS ANTES DE CONTINUAR
 - [ ] Actualizaciones automáticas
 - [ ] Busqueda en la librería
+- [ ] Añadir url de internet a la queue (hay que vigilar porque actualmente abro las canciones del HD mediante un blob)
 - [ ] Ecualizador
 - [ ] Visualizador de escenas complejas Threejs (ahora mismo es un three.js con un plano2D simple)
 - [ ]  - Utilizar nueva API de THREE.js (uff si yo me he enterado hace 2 dias... no auguro nada facil el cambio... pero es ULTRA necesario para TSL)
