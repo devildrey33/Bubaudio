@@ -12,7 +12,7 @@ Estoy utilizando herramientas de inteligencia artificial (IA) como apoyo para de
 
 ## Descarga
 
-Puedes descargar el instalador de Bubaudio 0.5.3 en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
+Puedes descargar el instalador de Bubaudio en formato zip, el cual incluye un modulo de instalación <b>M</b>icro<b>S</b>oft <b>I</b>nstaller
 - [Bubaudio 0.5.3 para Windows (x64)](https://github.com/devildrey33/Bubaudio/releases/download/RC/Bubaudio_0.5.3_x64_en-US.zip)
 
 ![Bubaudio1](docs/Bubaudio.png)
@@ -102,19 +102,14 @@ Implementado:
   - [x] Detectar agudos medios y graves
   - [x] Detectar bombo, caja, voz y charles
   - [x] Espectrograma
+  - [x] Flux y centroid
 - [x] Selector de shaders
 
-TODO FIRST (usar ia como si fuera un patito de goma que encima tiene la osiadia de contestar y dar su opinion) : 
-// Buenos temas de charla para copilot del windows 11, y ya de paso preguntar por el fftSize.
-- DILEMA!!! que accion deberia tener la rueda de ratón en general : { 
- - visualización REACTIVA (por ejemplo zoom camara o lo que le programe)
-            o
- - SUBIR / BAJAR VOLUMEN absolutamente siempre...
-}
+TODO FIRST - DILEMAS A SOLVENTAR CON LA IA
+- DILEMA2!! : Es posible calcular los BPM de la canción? Me resultaria util?...
+  - En proceso ahora ya he creado incluso un espectrograma, y tambien soporte para peaks de caja bombo voz y charles
 
-- DILEMA2!! : Es posible calcular los BPM de la canción? Me resultaria util?
-
-- DILEMA3!! : Seria muy complicado hacer listas con spotify y o algun otro servicio de streaming de audio?
+  
 
 
 
@@ -123,11 +118,13 @@ SOLUCIONAR DILEMAS ANTES DE CONTINUAR
 - [ ] Actualizaciones automáticas
 - [ ] Busqueda en la librería
 - [ ] Añadir url de internet a la queue (hay que vigilar porque actualmente abro las canciones del HD mediante un blob)
+- [ ]  - DILEMA!! : Seria muy complicado hacer listas con spotify y o algun otro servicio de streaming de audio?
 - [ ] Ecualizador
 - [ ] Visualizador de escenas complejas Threejs (ahora mismo es un three.js con un plano2D simple)
 - [ ]  - Utilizar nueva API de THREE.js (uff si yo me he enterado hace 2 dias... no auguro nada facil el cambio... pero es ULTRA necesario para TSL)
 - [ ]  - TSL (SUPER IMPORTANTE PARA ESCENAS MAS DETALLADAS)
-- [ ]  - Reactivo al mouse x, y, clicks, y talvez la rueda del raton
+- [ ]  - Reactivo al mouse x, y, clicks, 
+- [ ]    - la rueda del raton se tiene que usar para cambiar el volumen tanto desde controles como desde el visualizador
 - [ ]  - Opciones de depuración para cada shader (he pensado en un lector de fragments que sustituya las macros por uniforms si está en modo debug)
 - [ ]  - Decidir fftSize, o añadir una opcion para modificar el fftSize 
 - [ ] Eventos mouse y teclado

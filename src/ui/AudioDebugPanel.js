@@ -6,9 +6,14 @@ const LEVELS = [
     { key: "mid",       label: "Medios" },
     { key: "treble",    label: "Agudos" },
     // Detector de transitorios original
-    { key: "beat",      label: "▲ Graves" },
-    { key: "midBeat",   label: "▲ Medios" },
-    { key: "trebleBeat",label: "▲ Agudos" },
+    { key: "beat",      label: "▼ Graves" },
+    { key: "midBeat",   label: "▼ Medios" },
+    { key: "trebleBeat",label: "▼ Agudos" },
+    // Picos
+    { key: "bassPeak",  label: "▲ Graves" },
+    { key: "midPeak",   label: "▲ Medios" },
+    { key: "treblePeak",label: "▲ Agudos" },
+
 
     // Bandas musicales
     { key: "kick",      label: "Bombo" },
@@ -20,7 +25,10 @@ const LEVELS = [
     { key: "kickPeak",  label: "▲ Bombo" },
     { key: "snarePeak", label: "▲ Caja" },
     { key: "voicePeak", label: "▲ Voz" },
-    { key: "hihatPeak", label: "▲ Charles" }
+    { key: "hihatPeak", label: "▲ Charles" },
+
+    { key: "flux"    , label: "Flux" },
+    { key: "centroid", label: "Centroid" }
 ];
 
 
@@ -31,6 +39,7 @@ export default class AudioDebugPanel {
     #levels = new Map();
     #animationFrame = null;
     #fpsValue;
+    #bpmValue;
     #lastFrameTime = null;
     #fps = 0;
     #collapsed = false
@@ -59,10 +68,26 @@ export default class AudioDebugPanel {
         const titleText = document.createElement("span");
         titleText.textContent = "Niveles de audio";
 
+        this.#bpmValue = document.createElement("span");
+        this.#bpmValue.className = "audio-debug-fps-value";
+        this.#bpmValue.textContent = "--";
+
+        const bpmLabel = document.createElement("span");
+        bpmLabel.className = "audio-debug-fps-label";
+        bpmLabel.textContent = " BPM";
+
+
         leftSide.append(
             this.#toggleButton,
-            titleText
+            titleText,
+            this.#bpmValue,
+            bpmLabel
         );
+
+/*        leftSide.append(
+            this.#toggleButton,
+            titleText
+        );*/
 
         const fpsContainer = document.createElement("span");
         fpsContainer.className = "audio-debug-fps";
@@ -114,7 +139,6 @@ export default class AudioDebugPanel {
 
 
     #createLevelRow(level) {
-
         const row = document.createElement("div");
         row.className = "audio-debug-row";
 
@@ -145,34 +169,36 @@ export default class AudioDebugPanel {
 
     #toggle() {
         this.#collapsed = !this.#collapsed;
-
-        this.#toggleButton.textContent =
-            this.#collapsed ? "►" : "▼";
-
-        this.#content.classList.toggle(
-            "collapsed",
-            this.#collapsed
-        );
+        this.#toggleButton.textContent = this.#collapsed ? "►" : "▼";
+        this.#content.classList.toggle("collapsed", this.#collapsed);
     }
 
     #update(time = performance.now()) {
-
         for (const level of LEVELS) {
-            const value = Math.max(
-                0,
-                Math.min(1, this.#audio[level.key])
-            );
+            const value = Math.max(0, Math.min(1, this.#audio[level.key]));
             const percent = Math.round(value * 100);
             const elements = this.#levels.get(level.key);
 
             elements.fill.style.width = `${percent}%`;
             elements.value.textContent = `${percent}%`;
             elements.meter.setAttribute("aria-valuenow", String(percent));
+            if (level.key === "centroid") {
+                const hue = 240 - (value * 240);
+                elements.fill.style.background = `hsl(${hue}deg 100% 50%)`;
+            }
         }
 
+        // BPM
+        const bpm = Math.round(this.#audio.bpm);
+        this.#bpmValue.textContent = bpm > 0 ? bpm : "--";
+        // Mismo degradado que los FPS
+        const bpmNormalized = Math.max(0, Math.min(1, (bpm - 60) / 140));
+        const bpmHue = bpmNormalized * 120;
+        this.#bpmValue.style.color = `hsl(${bpmHue}deg 100% 50%)`;
+
+        // FPS
         if (this.#lastFrameTime !== null) {
             const frameDuration = time - this.#lastFrameTime;
-
             if (frameDuration > 0) {
                 const currentFps = 1000 / frameDuration;
                 this.#fps += (currentFps - this.#fps) * 0.2;

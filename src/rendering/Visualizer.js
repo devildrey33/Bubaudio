@@ -59,6 +59,19 @@ export default class Visualizer {
     #shaderIndex = 0;
 
 
+    #mouse = new THREE.Vector2(0.5, 0.5);
+    #mousePrevious = new THREE.Vector2(0.5, 0.5);
+    #mouseDelta = new THREE.Vector2();
+
+    #wheel = 0;
+
+//    #mouseLeft = 0;
+    #mouseMiddle = 0;
+    #mouseRight = 0;
+
+    #mouseButton4 = 0;
+    #mouseButton5 = 0;    
+
     /**
      * Construye la escena, texturas, uniforms y material, e instala el listener
      * de redimensionamiento. El render loop se inicia por separado con start().
@@ -85,11 +98,8 @@ export default class Visualizer {
     #createScene() {
 
         this.#scene = new THREE.Scene();
-
         this.#camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
         this.#renderer = new THREE.WebGLRenderer({ antialias : true });
-
         this.#renderer.setSize(window.innerWidth, window.innerHeight);
 
         // El renderer crea y posee este canvas; la clase lo expone mediante
@@ -146,6 +156,10 @@ export default class Visualizer {
             uMid    : { value : 0 },
             uTreble : { value : 0 },
 
+            uBassPeak   : { value : 0 },
+            uMidPeak    : { value : 0 },
+            uTreblePeak : { value : 0 },
+
             uBeat       : { value : 0 },
             uMidBeat    : { value : 0 },
             uTrebleBeat : { value : 0 },
@@ -157,10 +171,16 @@ export default class Visualizer {
             uHiHat : { value : 0 },
 
             // Transitorios / picos
-            uKickPeak : { value : 0 },
+            uKickPeak  : { value : 0 },
             uSnarePeak : { value : 0 },
             uVoicePeak : { value : 0 },
             uHiHatPeak : { value : 0 },
+
+            uFlux     : { value: 0.0 },
+            uCentroid : { value: 0.0 },
+
+            uBPM       : { value : 0 },
+            uBeatPhase : { value : 0 },
 
             uWaveform : { value : this.#waveformTexture },
             uSpectrum : { value : this.#fftTexture },
@@ -168,12 +188,20 @@ export default class Visualizer {
             uFFTHistory         : { value : this.#fftHistoryTexture },
             uFFTHistoryOffset   : { value : 0 },
 
-            uResolution : {
-                value : new THREE.Vector2(
-                    window.innerWidth,
-                    window.innerHeight
-                )
-            }
+            uResolution         : { value : new THREE.Vector2(window.innerWidth, window.innerHeight) },
+
+            // Mouse
+            uMouse          : { value : new THREE.Vector2(0.5, 0.5) },
+            // Movimiento del ratón desde el frame anterior
+            uMouseDelta     : { value : new THREE.Vector2() },
+            // Rueda del ratón acumulada
+            uWheel          : { value : 0 },
+            // Botones principales
+            uMouseMiddle    : { value : 0 },
+            uMouseRight     : { value : 0 },
+            // Botones laterales
+            uMouseButton4   : { value : 0 },
+            uMouseButton5   : { value : 0 }            
         };
     }
 
@@ -186,31 +214,15 @@ export default class Visualizer {
      * @private
      */
     #createMaterial() {
-
-        this.#geometry = new THREE.PlaneGeometry(
-            2,
-            2
-        );
-
+        this.#geometry = new THREE.PlaneGeometry(2, 2);
         this.#material = new THREE.ShaderMaterial({
-
-            uniforms : this.#uniforms,
-
-            vertexShader :
-                shaders.fullscreen,
-
-            fragmentShader :
-                shaders.shaders[this.#shaderIndex].fragment
+            uniforms        : this.#uniforms,
+            vertexShader    : shaders.fullscreen,
+            fragmentShader  : shaders.shaders[this.#shaderIndex].fragment
         });
 
-        this.#mesh = new THREE.Mesh(
-            this.#geometry,
-            this.#material
-        );
-
-        this.#scene.add(
-            this.#mesh
-        );
+        this.#mesh = new THREE.Mesh(this.#geometry, this.#material);
+        this.#scene.add(this.#mesh);
     }
 
 
@@ -221,10 +233,12 @@ export default class Visualizer {
      * @private
      */
     #registerEvents() {
-        window.addEventListener(
-            "resize",
-            () => this.#onResize()
-        );
+        window.addEventListener("resize", () => this.#onResize());
+        window.addEventListener("mousemove", this.#onMouseMove);
+//        window.addEventListener("wheel", this.#onWheel, { passive: true });
+
+        window.addEventListener("mousedown", this.#onMouseDown);
+        window.addEventListener("mouseup", this.#onMouseUp);
     }
 
 
@@ -235,18 +249,40 @@ export default class Visualizer {
      * @private
      */
     #onResize() {
-
-        this.#renderer.setSize(
-            window.innerWidth,
-            window.innerHeight
-        );
-
-        this.#uniforms.uResolution.value.set(
-            window.innerWidth,
-            window.innerHeight
-        );
+        this.#renderer.setSize(window.innerWidth, window.innerHeight);
+        this.#uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
     }
 
+    #onMouseMove = (event) => {
+        const x = event.clientX / window.innerWidth;
+        const y = 1.0 - (event.clientY / window.innerHeight);
+        this.#mouse.set(x, y);
+    };
+
+    #onMouseDown = (event) => {
+        switch (event.button) {
+//            case 0: this.#mouseLeft    = 1; break;
+            case 1: this.#mouseMiddle  = 1; break;
+            case 2: this.#mouseRight   = 1; break;
+            case 3: this.#mouseButton4 = 1; break;
+            case 4: this.#mouseButton5 = 1; break;
+        }
+    };    
+
+    #onMouseUp = (event) => {
+        switch (event.button) {
+//            case 0: this.#mouseLeft    = 0; break;
+            case 1: this.#mouseMiddle  = 0; break;
+            case 2: this.#mouseRight   = 0; break;
+            case 3: this.#mouseButton4 = 0; break;
+            case 4: this.#mouseButton5 = 0; break;
+        }
+    };    
+
+/*    #onWheel = (event) => {
+      this.#wheel += Math.sign(-event.deltaY) * 0.1;
+    };*/
+    
 
     /**
      * Solicita el primer frame del bucle de renderizado. Cada llamada adicional
@@ -274,6 +310,11 @@ export default class Visualizer {
      * @private
      */
     #animate(time) {
+
+        // Delta del ratón desde el frame anterior
+        this.#mouseDelta.subVectors(this.#mouse, this.#mousePrevious);
+        this.#mousePrevious.copy(this.#mouse);
+
         // AudioAnalyzer reutiliza sus TypedArrays; se copian sus primeras (fftSize / 2)
         // muestras a buffers persistentes de DataTexture antes de subirlos a GPU.
         this.#audio.update();
@@ -296,27 +337,39 @@ export default class Visualizer {
         this.#uniforms.uTreble.value        = this.#audio.treble;
         this.#uniforms.uVolume.value        = this.#audio.volume;
         this.#uniforms.uBeat.value          = this.#audio.beat;
+        this.#uniforms.uBassPeak.value      = this.#audio.bassPeak;
+        this.#uniforms.uMidPeak.value       = this.#audio.midPeak;
+        this.#uniforms.uTreblePeak.value    = this.#audio.treblePeak;        
         this.#uniforms.uMidBeat.value       = this.#audio.midBeat;
         this.#uniforms.uTrebleBeat.value    = this.#audio.trebleBeat;
+        this.#uniforms.uKick.value          = this.#audio.kick;
+        this.#uniforms.uSnare.value         = this.#audio.snare;
+        this.#uniforms.uVoice.value         = this.#audio.voice;
+        this.#uniforms.uHiHat.value         = this.#audio.hihat;
+        this.#uniforms.uKickPeak.value      = this.#audio.kickPeak;
+        this.#uniforms.uSnarePeak.value     = this.#audio.snarePeak;
+        this.#uniforms.uVoicePeak.value     = this.#audio.voicePeak;
+        this.#uniforms.uHiHatPeak.value     = this.#audio.hihatPeak;        
+        this.#uniforms.uFlux.value          = this.#audio.flux;
+        this.#uniforms.uCentroid.value      = this.#audio.centroid;
+        this.#uniforms.uBPM.value           = this.#audio.bpm;
+        this.#uniforms.uBeatPhase.value     = this.#audio.beatPhase;
 
-        this.#uniforms.uKick.value = this.#audio.kick;
-        this.#uniforms.uSnare.value = this.#audio.snare;
-        this.#uniforms.uVoice.value = this.#audio.voice;
-        this.#uniforms.uHiHat.value = this.#audio.hihat;
+        // Mouse
+        this.#uniforms.uMouse.value.copy(this.#mouse);
+        this.#uniforms.uMouseDelta.value.copy(this.#mouseDelta);
+//        this.#uniforms.uWheel.value = this.#wheel;
 
-        this.#uniforms.uKickPeak.value = this.#audio.kickPeak;
-        this.#uniforms.uSnarePeak.value = this.#audio.snarePeak;
-        this.#uniforms.uVoicePeak.value = this.#audio.voicePeak;
-        this.#uniforms.uHiHatPeak.value = this.#audio.hihatPeak;        
+//        this.#uniforms.uMouseLeft.value   = this.#mouseLeft;
+        this.#uniforms.uMouseMiddle.value = this.#mouseMiddle;
+        this.#uniforms.uMouseRight.value  = this.#mouseRight;
 
-        this.#renderer.render(
-            this.#scene,
-            this.#camera
-        );
+        this.#uniforms.uMouseButton4.value = this.#mouseButton4;
+        this.#uniforms.uMouseButton5.value = this.#mouseButton5;
 
-        requestAnimationFrame(
-            this.#animate.bind(this)
-        );
+        // Renderizado
+        this.#renderer.render(this.#scene, this.#camera);
+        requestAnimationFrame(this.#animate.bind(this));
     }
 
 
@@ -329,21 +382,14 @@ export default class Visualizer {
      * @param {number} index Índice del shader que se activará.
      */
     setShader(index = 0) {
-
         if (index < 0 || index >= shaders.shaders.length) {
             return;
         }
 
         this.#shaderIndex = index;
-
         this.#material.fragmentShader = shaders.shaders[index].fragment;
-
         this.#material.needsUpdate = true;
-
-        console.log(
-            "Shader:",
-            shaders.shaders[index].name
-        );
+        console.log("Shader:", shaders.shaders[index].name);
     }
 
 
@@ -352,13 +398,10 @@ export default class Visualizer {
      * del último.
      */
     nextShader() {
-
         let index = this.#shaderIndex + 1;
-
         if (index >= shaders.shaders.length) {
             index = 0;
         }
-
         this.setShader(index);
     }
 
@@ -368,13 +411,10 @@ export default class Visualizer {
      * primero.
      */
     previousShader() {
-
         let index = this.#shaderIndex - 1;
-
         if (index < 0) {
             index = shaders.shaders.length - 1;
         }
-
         this.setShader(index);
     }
 

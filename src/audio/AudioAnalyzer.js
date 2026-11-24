@@ -96,11 +96,16 @@ export default class AudioAnalyzer {
     // Posición actual del ring buffer
     #fftHistoryWriteRow = 0;    
 
+    #volume     = 0;
     // Niveles suavizados que consumen los medidores y los shaders.
     #bass       = 0;
     #mid        = 0;
     #treble     = 0;
-    #volume     = 0;
+    // Peaks con caída lenta
+    #bassPeak   = 0;
+    #midPeak    = 0;
+    #treblePeak = 0;
+    // Beats / eventos
     #beat       = 0;
     #midBeat    = 0;
     #trebleBeat = 0;
@@ -139,6 +144,26 @@ export default class AudioAnalyzer {
     #voicePeak = 0;
     #hihatPeak = 0;    
 
+    // Espectro FFT del frame anterior (para calcular Spectral Flux)
+    #previousSpectrum = null;
+    // Cantidad de cambio entre espectros consecutivos
+    #flux = 0.0;
+    // Centro de gravedad espectral normalizado (0-1)
+    #centroid = 0.0;    
+
+    // =========================================================================
+    // BPM
+    // =========================================================================
+    // BPM estimados de la canción.
+    #bpm = 0;
+    // Fase normalizada del beat actual (0..1)
+    #beatPhase = 0;
+    // Instantes de los últimos beats detectados.
+    #beatTimes = [];
+    // Último beat válido detectado.
+    #lastBeatTime = 0;
+    // Duración media del beat en milisegundos.
+    #beatInterval = 500;    
     // Impide interpretar la primera muestra como una subida desde cero.
     #hasTransientBaseline = false;
 
@@ -151,6 +176,7 @@ export default class AudioAnalyzer {
     // URL temporal asociada al Blob del archivo actualmente cargado.
     #blobUrl = null;
 
+    // Beats Per Minute
 
 
     /**
@@ -259,19 +285,13 @@ export default class AudioAnalyzer {
      *
      * @returns {Promise<void>} Promesa nativa de inicio de reproducción.
      */
-    play() {
-        return this.#audioElement.play();
-    }
-
+    play() { return this.#audioElement.play(); }
 
     /**
      * Pausa el elemento de audio sin reiniciar su posición.
      * Para detenerlo y volver al comienzo se usa stop().
      */
-    pause() {
-        this.#audioElement.pause();
-    }
-
+    pause() { this.#audioElement.pause(); }
 
     /**
      * Reactiva el contexto de Web Audio si el sistema o el navegador lo
@@ -329,14 +349,28 @@ export default class AudioAnalyzer {
      * No agenda el siguiente frame: el bucle visualizador debe invocarlo.
      */
     update() {
-
         // Permite que la actualización sea inocua si el analizador no existe.
         if (!this.#analyser) {
             return;
         }
+        const now = performance.now();
 
         // Estos métodos escriben en los TypedArrays proporcionados.
         this.#analyser.getByteFrequencyData(this.#fftData);
+
+        // ======================================================
+        // Spectral Flux
+        // ======================================================
+        const flux = this.#calculateFlux();
+        this.#flux = this.#envelope(this.#flux, flux, 0.35, 0.08);
+
+        // ======================================================
+        // Spectral Centroid
+        // ======================================================
+        const centroid = this.#calculateCentroid();
+        this.#centroid = this.#envelope(this.#centroid, centroid, 0.15, 0.08);
+
+        
         this.#updateFftHistory();
         this.#analyser.getByteTimeDomainData(this.#timeData);
 
@@ -363,7 +397,7 @@ export default class AudioAnalyzer {
         // Attack rápido para capturar golpes.
         // Release lento para estabilizar la señal.
         // ---------------------------------------------------------
-
+const previousKickEnv = this.#kickEnv;
         this.#kickEnv = this.#envelope(this.#kickEnv, kick, 0.65, 0.04);
         this.#snareEnv = this.#envelope(this.#snareEnv, snare, 0.65, 0.04);
         this.#voiceEnv = this.#envelope(this.#voiceEnv, voice, 0.65, 0.04);
@@ -376,6 +410,15 @@ export default class AudioAnalyzer {
         this.#mid += (mid - this.#mid) * AudioAnalyzer.SMOOTHING;
         this.#treble += (treble - this.#treble) * AudioAnalyzer.SMOOTHING;
         this.#volume += (volume - this.#volume) * AudioAnalyzer.SMOOTHING;
+        // ---------------------------------------------------------
+        // Peak Hold
+        //
+        // Conserva el valor máximo reciente y lo deja caer de forma
+        // gradual para crear indicadores tipo VU Meter.
+        // ---------------------------------------------------------
+        this.#bassPeak   = Math.max(bass,   this.#bassPeak   * 0.98);
+        this.#midPeak    = Math.max(mid,    this.#midPeak    * 0.98);
+        this.#treblePeak = Math.max(treble, this.#treblePeak * 0.98);
 
         // La referencia lenta permite detectar cambios respecto al nivel
         // reciente: una banda alta pero estable deja de producir pulsos.
@@ -431,10 +474,12 @@ export default class AudioAnalyzer {
             this.#trebleTransientArmed = true;
         }
 
+        
         // Cada banda genera su propio pulso para poder reaccionar por separado.
         if (this.#bassTransientArmed && bassChange > bassThreshold) {
             const strength = this.#transientStrength(bassChange, bassThreshold);
             this.#beat = Math.max(this.#beat, strength);
+            console.log("BASS BEAT");
             this.#bassTransientArmed = false;
         }
 
@@ -456,17 +501,25 @@ export default class AudioAnalyzer {
         this.#midBaseline    += (mid - this.#midBaseline)       * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
         this.#trebleBaseline += (treble - this.#trebleBaseline) * AudioAnalyzer.TRANSIENT_BASELINE_SMOOTHING;
 
-
+        if (this.#beatInterval > 0) {
+            this.#beatPhase = ((now - this.#lastBeatTime) / this.#beatInterval);
+            this.#beatPhase = Math.max(0, Math.min(1, this.#beatPhase));
+        }        
         // ---------------------------------------------------------
         // Transitorios musicales
         //
         // Detecta aumentos rápidos respecto a la envolvente.
         // ---------------------------------------------------------
-        const kickTransient = Math.max(0, kick - this.#kickEnv);
+//        const kickTransient = Math.max(0, kick - this.#kickEnv);
+        const kickTransient  = Math.max(0, kick - previousKickEnv);
         const snareTransient = Math.max(0, snare - this.#snareEnv);
         const voiceTransient = Math.max(0, voice - this.#voiceEnv);
         const hihatTransient = Math.max(0, hihat - this.#hihatEnv);
 
+if (kickTransient > 0.03 && now - this.#lastBeatTime > 250) {
+    console.log("BPM HIT", kickTransient.toFixed(3));
+    this.#registerBeat(now);
+}        
         // ---------------------------------------------------------
         // Peaks para shaders
         // ---------------------------------------------------------
@@ -476,12 +529,63 @@ export default class AudioAnalyzer {
         this.#voicePeak = Math.max(voiceTransient, this.#voicePeak * 0.90);
         this.#hihatPeak = Math.max(hihatTransient, this.#hihatPeak * 0.90);
 
+
         // Atenúa los pulsos en cada frame hasta que regresan a cero.
         this.#beat *= 0.92;
         this.#midBeat *= 0.92;
         this.#trebleBeat *= 0.92;
     }
 
+    /**
+     * Registra un nuevo beat y recalcula el BPM estimado.
+     *
+     * Se utilizan los últimos intervalos detectados para
+     * suavizar la estimación y evitar saltos bruscos.
+     */
+    #registerBeat(now) {
+        // Evitar dobles disparos muy seguidos.
+        if (now - this.#lastBeatTime < 250) {
+            return;
+        }
+
+        this.#lastBeatTime = now;
+
+        this.#beatTimes.push(now);
+
+        // Conservamos los últimos 16 beats.
+        if (this.#beatTimes.length > 16) {
+            this.#beatTimes.shift();
+        }
+
+        if (this.#beatTimes.length >= 4) {
+            let total = 0;
+
+            for (let i = 1; i < this.#beatTimes.length; i++) {
+                total += this.#beatTimes[i] - this.#beatTimes[i - 1];
+            }
+
+            this.#beatInterval = total / (this.#beatTimes.length - 1);
+
+            let bpm = 60000 / this.#beatInterval;
+
+            // Muchos detectores capturan medio tempo.
+            if (bpm < 90) {
+                bpm *= 2;
+            }
+
+            // Limitar a rangos razonables.
+            if (bpm >= 50 && bpm <= 220) {
+                this.#bpm += (bpm - this.#bpm) * 0.15;
+            }
+
+            console.log(
+                "BPM:",
+                Math.round(this.#bpm),
+                "interval:",
+                Math.round(this.#beatInterval)
+            );
+        }
+    }
     /**
      * Convierte el exceso sobre el umbral en la amplitud del pulso.
      *
@@ -551,66 +655,6 @@ export default class AudioAnalyzer {
     }
 
 
-    /** Nivel suavizado de graves, normalizado de 0 a 1. */
-    get bass() {
-        return this.#bass;
-    }
-
-    /** Nivel suavizado de medios, normalizado de 0 a 1. */
-    get mid() {
-        return this.#mid;
-    }
-
-    /** Nivel suavizado de agudos, normalizado de 0 a 1. */
-    get treble() {
-        return this.#treble;
-    }
-
-    /** Promedio normalizado de todo el espectro de frecuencias. */
-    get volume() {
-        return this.#volume;
-    }
-
-    /** Envolvente decreciente del último transitorio detectado en graves. */
-    get beat() {
-        return this.#beat;
-    }
-
-    /** Envolvente decreciente del último transitorio detectado en medios. */
-    get midBeat() {
-        return this.#midBeat;
-    }
-
-    /** Envolvente decreciente del último transitorio detectado en agudos. */
-    get trebleBeat() {
-        return this.#trebleBeat;
-    }
-
-    /**
-     * Buffer de frecuencia actual. Se reutiliza cada frame para evitar
-     * reservar memoria; quien lo lea no debe conservarlo como una instantánea.
-     */
-    get spectrum() {
-        return this.#fftData;
-    }
-
-    /**
-     * Buffer de forma de onda actual, también reutilizado cada frame.
-     */
-    get waveform() {
-        return this.#timeData;
-    }
-
-    // Estos gets solo se utilizan para el modo DEBUG
-    get kick()      { return this.#kick; }
-    get snare()     { return this.#snare; }
-    get voice()     { return this.#voice; }
-    get hihat()     { return this.#hihat; }
-    // Estos valores van de 0 a 1, y para que se vean bien en el DebugPanel los multiplico por 100
-    get kickPeak()  { return this.#kickPeak * 100; }
-    get snarePeak() { return this.#snarePeak * 100; }
-    get voicePeak() { return this.#voicePeak * 100; }
-    get hihatPeak() { return this.#hihatPeak * 100; }
 
 
     /**
@@ -652,6 +696,99 @@ export default class AudioAnalyzer {
 
 
     /**
+     * Calcula el centro de gravedad espectral.
+     *
+     * 0.0 = sonido grave
+     * 1.0 = sonido agudo
+     */
+    #calculateCentroid() {
+        let weightedSum = 0.0;
+        let totalEnergy = 0.0;
+
+        const bins = this.#fftData.length;
+
+        for (let i = 0; i < bins; i++) {
+            const magnitude = this.#fftData[i];
+
+            weightedSum += i * magnitude;
+            totalEnergy += magnitude;
+        }
+
+        if (totalEnergy <= 0.0) {
+            return 0.0;
+        }
+
+        return (weightedSum / totalEnergy) / bins;
+    }   
+    
+    
+    /**
+     * Calcula cuánto ha cambiado el espectro respecto al frame anterior.
+     * Valores altos indican nuevos sonidos, golpes o transitorios.
+     *
+     * 0.0 = sonido estable
+     * 1.0 = gran cambio espectral
+     */
+    #calculateFlux() {
+        if (!this.#previousSpectrum) {
+            this.#previousSpectrum = new Uint8Array(this.#fftData);
+            return 0.0;
+        }
+
+        let flux = 0.0;
+
+        for (let i = 0; i < this.#fftData.length; i++) {
+            const diff = this.#fftData[i] - this.#previousSpectrum[i];
+
+            // Solo consideramos cambios positivos
+            if (diff > 0) {
+                flux += diff;
+            }
+
+            this.#previousSpectrum[i] = this.#fftData[i];
+        }
+
+        // Normalizar aproximadamente a 0-1
+        return Math.min(flux / (this.#fftData.length * 255.0), 1.0);
+    }
+
+
+
+
+    /**
+     * Busca una posición de la pista, expresada en segundos.
+     * La validez de la posición depende de los metadatos y del medio cargado;
+     * el elemento HTMLAudioElement gestiona el ajuste/error correspondiente.
+     *
+     * @param {number} seconds Posición solicitada en segundos.
+     */
+    seek(seconds) {
+        if (!this.#audioElement) {
+            return;
+        }
+        this.#audioElement.currentTime = seconds;
+    }
+    
+    #updateFftHistory() {
+        const width = this.#fftData.length;
+        const offset = this.#fftHistoryWriteRow * width;
+        this.#fftHistory.set(this.#fftData, offset);
+        this.#fftHistoryWriteRow = (this.#fftHistoryWriteRow + 1) % this.#fftHistoryHeight;
+    }    
+
+/**
+     * Ajusta el volumen de salida y limita el valor al rango admitido.
+     * El cambio afecta al elemento de audio, no a las muestras normalizadas
+     * que ya se obtuvieron en buffers previos del analizador.
+     *
+     * @param {number} value Volumen solicitado; se limita a 0-1.
+     */
+    set volumeLevel(value) {
+        this.#audioElement.volume = Math.min(1, Math.max(0, value));
+    }
+
+
+    /**
      * Posición actual del elemento de audio, en segundos.
      */
     get currentTime() {
@@ -674,34 +811,6 @@ export default class AudioAnalyzer {
         return this.#audioElement.volume;
     }
 
-
-    /**
-     * Ajusta el volumen de salida y limita el valor al rango admitido.
-     * El cambio afecta al elemento de audio, no a las muestras normalizadas
-     * que ya se obtuvieron en buffers previos del analizador.
-     *
-     * @param {number} value Volumen solicitado; se limita a 0-1.
-     */
-    set volumeLevel(value) {
-        this.#audioElement.volume = Math.min(1, Math.max(0, value));
-    }
-
-
-    /**
-     * Busca una posición de la pista, expresada en segundos.
-     * La validez de la posición depende de los metadatos y del medio cargado;
-     * el elemento HTMLAudioElement gestiona el ajuste/error correspondiente.
-     *
-     * @param {number} seconds Posición solicitada en segundos.
-     */
-    seek(seconds) {
-        if (!this.#audioElement) {
-            return;
-        }
-        this.#audioElement.currentTime = seconds;
-    }
-
-
     /**
      * Indica si el elemento está reproduciendo en este momento.
      * Devuelve true si está reproduciendo y false si está pausado.
@@ -714,28 +823,68 @@ export default class AudioAnalyzer {
      * Expone el HTMLAudioElement para que Player pueda consultar su estado y
      * conectar sus propios manejadores de eventos.
      */
-    get audioElement() {
-        return this.#audioElement;
-    }    
-
-
-    get fftSize() {
-        return this.#fftSize;
-    }
-
-
-    #updateFftHistory() {
-        const width = this.#fftData.length;
-
-        const offset = this.#fftHistoryWriteRow * width;
-
-        this.#fftHistory.set(this.#fftData, offset);
-
-        this.#fftHistoryWriteRow = (this.#fftHistoryWriteRow + 1) % this.#fftHistoryHeight;
-    }    
+    get audioElement()  { return this.#audioElement; }    
+    get fftSize()       { return this.#fftSize; }    
 
     get fftHistory()            { return this.#fftHistory; }
     get fftHistoryWriteRow()    { return this.#fftHistoryWriteRow; }
     get fftHistoryWidth()       { return this.#fftData.length;}
     get fftHistoryHeight()      { return this.#fftHistoryHeight;}    
+    /** Nivel suavizado de graves, normalizado de 0 a 1. */
+    get bass()                  {       return this.#bass;    }
+    /** Nivel suavizado de medios, normalizado de 0 a 1. */
+    get mid()                   {        return this.#mid;    }
+    /** Nivel suavizado de agudos, normalizado de 0 a 1. */
+    get treble()                {        return this.#treble;    }
+    /** Promedio normalizado de todo el espectro de frecuencias. */
+    get volume()                {        return this.#volume;    }
+    /** Envolvente decreciente del último transitorio detectado en graves. */
+    get beat()                  {        return this.#beat;    }
+    /** Envolvente decreciente del último transitorio detectado en medios. */
+    get midBeat()               {        return this.#midBeat;    }
+    /** Envolvente decreciente del último transitorio detectado en agudos. */
+    get trebleBeat()            {        return this.#trebleBeat;    }
+    //  Buffer de frecuencia actual. Se reutiliza cada frame para evitar
+    //  reservar memoria; quien lo lea no debe conservarlo como una instantánea.
+    get spectrum()              {        return this.#fftData;    }
+    //  Buffer de forma de onda actual, también reutilizado cada frame.
+    get waveform()              {        return this.#timeData;    }
+    //  Estos gets solo se utilizan para el modo DEBUG
+    get kick()                  { return this.#kick; }
+    get snare()                 { return this.#snare; }
+    get voice()                 { return this.#voice; }
+    get hihat()                 { return this.#hihat; }
+    //  Estos valores van de 0 a 1, y para que se vean bien en el DebugPanel los multiplico por 100
+    get kickPeak()              { return this.#kickPeak * 100; }
+    get snarePeak()             { return this.#snarePeak * 100; }
+    get voicePeak()             { return this.#voicePeak * 100; }
+    get hihatPeak()             { return this.#hihatPeak * 100; }
+
+    get flux()                  { return this.#flux * 100; }
+    get centroid()              { return this.#centroid; }
+    //  Máximo reciente detectado en graves.
+    //  Desciende progresivamente cuando no aparecen nuevos picos.
+    get bassPeak()              { return this.#bassPeak; }
+    //  Máximo reciente detectado en medios.
+    //  Desciende progresivamente cuando no aparecen nuevos picos.
+    get midPeak()               { return this.#midPeak; }
+    //  Máximo reciente detectado en agudos.
+    //  Desciende progresivamente cuando no aparecen nuevos picos.
+    get treblePeak()            { return this.#treblePeak; }
+
+    /**
+     * BPM estimados de la canción.
+     */
+    get bpm() {
+        return this.#bpm;
+    }
+
+    /**
+     * Fase actual del beat.
+     *
+     * 0.0 = beat recién detectado
+     * 1.0 = próximo beat esperado
+     */
+    get beatPhase() { return this.#beatPhase; }    
 }
+
