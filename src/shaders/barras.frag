@@ -1,215 +1,430 @@
-// ============================================================================
-// AUDIO-REACTIVE RADIAL SHADER
-// ============================================================================
-// Shader radial reactivo al audio.
-//
-// Los controles principales están agrupados en la siguiente sección. Se han
-// dejado únicamente los parámetros que normalmente merece la pena modificar.
-// El resto de valores forman parte de la implementación y no deberían ser
-// necesarios para ajustar el look general.
-// ============================================================================
 
 precision highp float;
-
-// -----------------------------------------------------------------------------
-// CONTROLES PRINCIPALES
-// -----------------------------------------------------------------------------
-
-// Animación y espectro
-#define ROTATION_SPEED          0.20  // Velocidad de giro en radianes/segundo
-#define SPECTRUM_BAR_COUNT      64.0  // Barras por cada mitad del anillo
-#define SPECTRUM_FREQUENCY_POWER 0.70 // <1 da más espacio visual a agudos
-
-// Núcleo, barras y waveform
-#define CORE_KICK_GAIN          0.12  // Cuánto crece el núcleo con el kick
-#define SPECTRUM_MAX_LENGTH     0.30  // Longitud máxima de las barras
-#define WAVEFORM_AMPLITUDE      0.09  // Deformación máxima del anillo de onda
-
-// Ondas de choque
-#define SHOCK_MAX_RADIUS        2.40  // Radio máximo: >1 hace que salga por pantalla
-#define SHOCK_WIDTH             0.06  // Grosor máximo de la onda durante el golpe
-#define SHOCK_INTENSITY         1.60  // Brillo de la onda principal
-
-// Color, acabado y salida
-#define VIGNETTE_INTENSITY      0.50  // 0 desactiva la viñeta
-#define GRAIN_INTENSITY         0.035 // Grano analógico
-#define TONEMAP_EXPOSURE        1.30  // Exposición final
-#define OUTPUT_GAMMA            2.20  // Comentar la línea gamma si ya usas sRGB
-
-// Colores principales
-#define BACKGROUND_INNER_COLOR  vec3(0.02, 0.01, 0.04)
-#define BACKGROUND_OUTER_COLOR  vec3(0.10, 0.04, 0.18)
-#define SHOCK_MID_COLOR         vec3(0.05, 0.75, 1.00)
-#define SHOCK_SNARE_COLOR       vec3(0.30, 0.80, 1.00)
-
-// -----------------------------------------------------------------------------
-// Entradas desde el vertex shader y uniforms
-// -----------------------------------------------------------------------------
 
 varying vec2 vUv;
 
 uniform float uTime;
-uniform vec2  uResolution;
+uniform vec2 uResolution;
 
-// Datos de audio resumidos, normalmente normalizados a 0..1.
 uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
 uniform float uVolume;
 
-// Envolventes generales de beat.
 uniform float uBeat;
 uniform float uMidBeat;
 uniform float uTrebleBeat;
 
-// Niveles instantáneos por fuente.
 uniform float uKick;
 uniform float uSnare;
 uniform float uVoice;
 uniform float uHiHat;
 
-// Picos o ataques por fuente.
 uniform float uKickPeak;
 uniform float uSnarePeak;
 uniform float uVoicePeak;
 uniform float uHiHatPeak;
 
-// Texturas 1D guardadas como sampler2D y leídas en el canal rojo.
 uniform sampler2D uSpectrum;
 uniform sampler2D uWaveform;
 
 #define PI  3.14159265359
 #define TAU 6.28318530718
 
-// -----------------------------------------------------------------------------
-// Funciones auxiliares
-// -----------------------------------------------------------------------------
+// ============================================================================
+// CONTROLES
+// ============================================================================
 
-// Hash sencillo para generar grano pseudoaleatorio por píxel.
+#define ROTATION_SPEED 0.20
+
+#define SPECTRUM_MIN_BARS 8.0
+#define SPECTRUM_MAX_BARS 32.0
+#define SPECTRUM_FREQUENCY_POWER 0.70
+
+#define CORE_KICK_GAIN 0.12
+#define SPECTRUM_MAX_LENGTH 0.30
+#define WAVEFORM_AMPLITUDE 0.09
+
+#define EDGE_INTENSITY 0.65
+#define GRID_INTENSITY 0.18
+#define PARTICLE_COUNT 36.0
+#define PARTICLE_SIZE 0.009
+
+#define VIGNETTE_INTENSITY 0.38
+#define GRAIN_INTENSITY 0.025
+#define TONEMAP_EXPOSURE 1.30
+#define OUTPUT_GAMMA 2.20
+
+// ============================================================================
+// FUNCIONES AUXILIARES
+// ============================================================================
+
 float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
 }
 
-// Paleta de color cosenoidal suave.
 vec3 palette(float t) {
     return 0.5 + 0.5 * cos(TAU * (t + vec3(0.00, 0.33, 0.67)));
 }
 
-// -----------------------------------------------------------------------------
-// Fragment shader principal
-// -----------------------------------------------------------------------------
+float lineMask(float d, float width) {
+    return 1.0 - smoothstep(width, width + 0.002, d);
+}
+
+float segment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+// ============================================================================
+// SISTEMA 1: REJILLA HOLOGRÁFICA
+// ============================================================================
+
+float holographicGrid(vec2 p, float r, float t) {
+    float edge = smoothstep(0.55, 0.85, r);
+
+    vec2 grid = abs(fract(p * 8.0) - 0.5);
+    float lines = min(grid.x, grid.y);
+
+    float gridMask = lineMask(lines, 0.012);
+
+    vec2 fineGrid = abs(fract(p * 24.0) - 0.5);
+    float fineLines = min(fineGrid.x, fineGrid.y);
+    float fineMask = lineMask(fineLines, 0.018);
+
+    return edge * (gridMask * 0.55 + fineMask * 0.20)
+         * (0.7 + 0.3 * sin(t * 1.5 + p.x * 2.0));
+}
+
+// ============================================================================
+// SISTEMA 2: BOMBO — BARRIDOS DE ENERGÍA LATERALES
+// ============================================================================
+
+vec3 kickSystem(vec2 p, float r, float peak, float t) {
+    vec3 result = vec3(0.0);
+
+    float edge = smoothstep(0.52, 0.90, r);
+
+    float scan = fract(t * 0.32 + 0.5);
+
+    float leftScan = abs(p.x + scan * 1.7);
+    float rightScan = abs(p.x - scan * 1.7);
+
+    float scanLine = exp(-leftScan * 90.0)
+                   + exp(-rightScan * 90.0);
+
+    result += vec3(0.10, 0.48, 1.0)
+            * scanLine * edge * peak * 2.5;
+
+    float side = abs(abs(p.x) - 0.88 * (uResolution.x / uResolution.y));
+
+    float frame = lineMask(side, 0.012);
+
+    float horizontalLines = lineMask(
+        abs(fract(p.y * 5.0 + 0.5) - 0.5),
+        0.025
+    );
+
+    result += vec3(0.08, 0.35, 1.0)
+            * frame * horizontalLines * edge
+            * (0.2 + peak * 2.0);
+
+    float sideGlow = exp(
+        -pow(abs(p.x) - 0.85 * (uResolution.x / uResolution.y), 2.0) * 22.0
+    );
+
+    result += vec3(0.08, 0.25, 1.0)
+            * sideGlow * peak * 1.4;
+
+    return result;
+}
+
+// ============================================================================
+// SISTEMA 3: VOZ — COLUMNAS HOLOGRÁFICAS
+// ============================================================================
+
+vec3 voiceSystem(vec2 p, float r, float peak, float t) {
+    vec3 result = vec3(0.0);
+
+    float edge = smoothstep(0.48, 0.82, r);
+
+    float column = abs(fract(p.x * 9.0) - 0.5);
+    float columns = lineMask(column, 0.035);
+
+    float scan = fract(t * 0.16);
+
+    float verticalScan = exp(
+        -pow(fract(p.y * 0.5 + scan) - 0.5, 2.0) * 1200.0
+    );
+
+    float distortion = sin(p.x * 18.0 + t * 2.0) * 0.012 * peak;
+
+    float waveLines = lineMask(
+        abs(fract((p.y + distortion) * 12.0) - 0.5),
+        0.025
+    );
+
+    float structure = columns * waveLines;
+
+    result += vec3(0.75, 0.18, 1.0)
+            * structure * edge * (0.15 + peak * 2.0);
+
+    result += vec3(0.55, 0.12, 1.0)
+            * verticalScan * columns * edge * peak * 1.5;
+
+    float blocks = lineMask(
+        abs(fract(p.y * 16.0 + p.x * 2.0) - 0.5),
+        0.07
+    );
+
+    result += vec3(0.35, 0.12, 0.85)
+            * blocks * columns * edge * peak * 0.8;
+
+    return result;
+}
+
+// ============================================================================
+// SISTEMA 4: CAJA — RAYOS LÁSER DIAGONALES
+// ============================================================================
+
+vec3 snareSystem(vec2 p, float r, float peak, float t) {
+    vec3 result = vec3(0.0);
+
+    float edge = smoothstep(0.50, 0.78, r);
+    float aspect = uResolution.x / uResolution.y;
+
+    vec2 a = vec2(-aspect, -1.0);
+    vec2 b = vec2( aspect,  1.0);
+
+    vec2 c = vec2(-aspect,  1.0);
+    vec2 d = vec2( aspect, -1.0);
+
+    float beam1 = lineMask(segment(p, a, b), 0.0025);
+    float beam2 = lineMask(segment(p, c, d), 0.0025);
+
+    float diagonal = abs(p.x + p.y * aspect * 0.65);
+    float diagonal2 = abs(p.x - p.y * aspect * 0.65);
+
+    float secondary1 = lineMask(diagonal, 0.006);
+    float secondary2 = lineMask(diagonal2, 0.006);
+
+    float flash = peak * peak;
+
+    result += vec3(0.08, 0.85, 1.0)
+            * (beam1 + beam2) * edge * flash * 3.0;
+
+    result += vec3(0.05, 0.40, 0.9)
+            * (secondary1 + secondary2) * edge * peak * 1.5;
+
+    return result;
+}
+
+// ============================================================================
+// SISTEMA 5: CHARLES — PARTÍCULAS DIGITALES
+// ============================================================================
+
+vec3 hihatSystem(vec2 p, float r, float peak, float t) {
+    vec3 result = vec3(0.0);
+
+    float edge = smoothstep(0.40, 0.72, r);
+
+    for (int i = 0; i < 36; i++) {
+        float fi = float(i);
+
+        vec2 seed = vec2(
+            fi * 17.31 + 4.2,
+            fi * 31.73 + 8.1
+        );
+
+        vec2 pos = vec2(
+            hash21(seed),
+            hash21(seed + 13.7)
+        );
+
+        pos = (pos - 0.5) * vec2(
+            2.0 * (uResolution.x / uResolution.y),
+            2.0
+        );
+
+        pos.y += sin(t * 0.7 + fi * 2.0) * 0.025;
+        pos.x += cos(t * 0.5 + fi * 1.7) * 0.018;
+
+        float dist = length(p - pos);
+
+        float particle = exp(
+            -dist * dist / (PARTICLE_SIZE * PARTICLE_SIZE)
+        );
+
+        float core = exp(-dist * dist / 0.000008);
+
+        float variation = hash21(seed + 29.1);
+
+        result += vec3(0.25, 0.85, 1.0)
+                * particle * edge
+                * (0.12 + peak * 3.0)
+                * (0.5 + variation);
+
+        result += vec3(0.65, 0.9, 1.0)
+                * core * edge * peak * 2.0;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// FRAGMENT PRINCIPAL
+// ============================================================================
 
 void main() {
-    // Coordenadas centradas y corregidas por aspecto.
-    // En el eje corto de la pantalla, el borde está aproximadamente en r=1.
-    // Por eso SHOCK_MAX_RADIUS=2.40 permite que la onda salga completamente.
+
     vec2 p = (vUv - 0.5)
            * vec2(uResolution.x / uResolution.y, 1.0)
            * 2.0;
 
     float r = length(p);
     float ang = atan(p.y, p.x);
-    ang += uTime * ROTATION_SPEED;
 
-    // Coordenada angular normalizada a 0..1.
-    float a01 = fract(ang / TAU + 0.5);
     float t = uTime;
 
-    // Señales normalizadas. Los picos se usan para iniciar las ondas de choque.
-    float beat       = clamp(uKickPeak,  0.0, 1.0);
-    float midBeat    = clamp(uSnarePeak, 0.0, 1.0);
-    float trebleBeat = clamp(uHiHatPeak, 0.0, 1.0);
+    ang += t * ROTATION_SPEED;
 
-    float kick = clamp(uKick,  0.0, 1.0);
-    float snare = clamp(uSnare, 0.0, 1.0);
+    float a01 = fract(ang / TAU + 0.5);
+
+    float kick = clamp(uKick, 0.0, 1.0);
     float voice = clamp(uVoice, 0.0, 1.0);
     float hihat = clamp(uHiHat, 0.0, 1.0);
+
+    float kickPeak = clamp(uKickPeak, 0.0, 1.0);
     float voicePeak = clamp(uVoicePeak, 0.0, 1.0);
+    float snarePeak = clamp(uSnarePeak, 0.0, 1.0);
+    float hihatPeak = clamp(uHiHatPeak, 0.0, 1.0);
 
     float pixel = 1.0 / uResolution.y;
+
     vec3 col = vec3(0.0);
 
-    // -------------------------------------------------------------------------
-    // 1. Fondo
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // 1. FONDO
+    // ------------------------------------------------------------------------
 
     float bgFall = 1.0 - smoothstep(0.0, 1.3, r);
-    vec3 bg = mix(BACKGROUND_INNER_COLOR, BACKGROUND_OUTER_COLOR, bgFall);
-    bg *= 0.7 + 0.6 * uVolume + 0.25 * kick + 0.20 * voicePeak;
-    col += bg;
 
-    // -------------------------------------------------------------------------
-    // 2. Núcleo central
-    // -------------------------------------------------------------------------
-
-    float coreR = 0.09
-               + CORE_KICK_GAIN * kick
-               + 0.03 * beat
-               + 0.05 * voicePeak;
-
-    float coreGlow = exp(-max(r - coreR, 0.0) * 10.0);
-    vec3 coreCol = palette(0.15 + 0.35 * hihat + t * 0.02 + voice * 0.1);
-
-    col += coreCol * coreGlow
-         * (0.5 + 2.0 * kick + beat + voicePeak * 0.6);
-
-    // Destello blanco del centro al recibir un kick.
-    col += vec3(1.0) * exp(-r * 22.0) * (0.4 + kick);
-
-    // -------------------------------------------------------------------------
-    // 3. Barras de espectro
-    // -------------------------------------------------------------------------
-
-    float secondHalf = step(0.5, a01);
-    float halfAngle = fract(a01 * 2.0);
-    float cell = min(
-        floor(halfAngle * SPECTRUM_BAR_COUNT),
-        SPECTRUM_BAR_COUNT - 1.0
+    vec3 bg = mix(
+        vec3(0.012, 0.008, 0.025),
+        vec3(0.045, 0.025, 0.10),
+        bgFall
     );
 
-    // Espejamos el espectro para obtener simetría a ambos lados.
+    bg *= 0.7 + 0.6 * uVolume + 0.15 * kick;
+
+    col += bg;
+
+    // ------------------------------------------------------------------------
+    // 2. NÚCLEO RADIAL ORIGINAL
+    // ------------------------------------------------------------------------
+
+    float coreR = 0.09 + CORE_KICK_GAIN * kick;
+
+    float coreGlow = exp(-max(r - coreR, 0.0) * 10.0);
+
+    vec3 coreCol = palette(
+        0.15 + 0.35 * hihat + t * 0.02 + voice * 0.1
+    );
+
+    col += coreCol * coreGlow * (0.5 + 2.0 * kick);
+
+    // ------------------------------------------------------------------------
+    // 3. BARRAS DE ESPECTRO — 4 CUADRANTES, 8 GRÁFICOS DINÁMICOS
+    // ------------------------------------------------------------------------
+
+    // El volumen determina el número de barras.
+    // Volumen bajo: 8 barras.
+    // Volumen alto: 32 barras.
+    float volumeFactor = smoothstep(0.02, 0.45, clamp(uVolume, 0.0, 1.0));
+    float dynamicBarCount = mix(SPECTRUM_MIN_BARS, SPECTRUM_MAX_BARS, volumeFactor);
+
+    float quadrantAngle = fract(a01 * 4.0);
+
+    float secondHalf = step(0.5, quadrantAngle);
+
+    float halfAngle = fract(quadrantAngle * 2.0);
+
+    // Índice dinámico de barra.
+    float cell = min(
+        floor(halfAngle * dynamicBarCount),
+        dynamicBarCount - 1.0
+    );
+
+    // Invertimos el orden del segundo gráfico.
     float spectrumCell = mix(
         cell,
-        SPECTRUM_BAR_COUNT - 1.0 - cell,
+        dynamicBarCount - 1.0 - cell,
         secondHalf
     );
 
-    float fc = (spectrumCell + 0.5) / SPECTRUM_BAR_COUNT;
+    // Muestreo del espectro.
+    float fc = (spectrumCell + 0.5) / dynamicBarCount;
     float fx = pow(fc, SPECTRUM_FREQUENCY_POWER);
-    float spec = texture2D(uSpectrum, vec2(fx, 0.5)).r;
 
-    // Pequeña variación temporal para evitar barras totalmente estáticas.
+    float spec = texture2D(
+        uSpectrum,
+        vec2(fx, 0.5)
+    ).r;
+
     spec = clamp(
         spec * (0.9 + 0.1 * sin(t * 4.0 + spectrumCell * 0.7)),
         0.0,
         1.0
     );
 
-    // Hueco entre barras.
-    float dAng = abs(fract(halfAngle * SPECTRUM_BAR_COUNT) - 0.5) * 2.0;
+    // Separación entre barras.
+    float dAng = abs(
+        fract(halfAngle * dynamicBarCount) - 0.5
+    ) * 2.0;
+
     float gapMask = 1.0 - smoothstep(0.60, 1.0, dAng);
 
-    float baseR = 0.40 + 0.05 * kick + 0.02 * beat;
-    float barLen = spec * (SPECTRUM_MAX_LENGTH + 0.30 * kick + 0.20 * voice);
+    // Longitud radial.
+    float baseR = 0.40 + 0.05 * kick;
+
+    float barLen = spec * (
+        SPECTRUM_MAX_LENGTH + 0.30 * kick + 0.20 * voice
+    );
+
     float outerR = baseR + barLen;
 
-    float radialMask = smoothstep(baseR - pixel, baseR + pixel, r)
-                     * (1.0 - smoothstep(outerR - pixel, outerR + pixel, r));
+    float radialMask =
+        smoothstep(baseR - pixel, baseR + pixel, r) *
+        (1.0 - smoothstep(outerR - pixel, outerR + pixel, r));
+
     float barMask = radialMask * gapMask * step(0.015, spec);
 
-    vec3 barCol = palette(fc * 1.2 + 0.10 + t * 0.05 + hihat * 0.30);
+    vec3 barCol = palette(
+        fc * 1.2 + 0.10 + t * 0.05 + hihat * 0.30
+    );
+
     col += barCol * barMask
          * (0.5 + 1.8 * spec)
          * (0.8 + 0.5 * hihat);
 
-    // -------------------------------------------------------------------------
-    // 4. Anillo de waveform
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // 4. WAVEFORM — MISMA DISTRIBUCIÓN QUE LAS BARRAS
+    // ------------------------------------------------------------------------
 
-    float waveU = mix(halfAngle, 1.0 - halfAngle, secondHalf);
-    float wave = texture2D(uWaveform, vec2(waveU, 0.5)).r * 2.0 - 1.0;
+    float waveU = mix(
+        halfAngle,
+        1.0 - halfAngle,
+        secondHalf
+    );
+
+    float wave = texture2D(
+        uWaveform,
+        vec2(waveU, 0.5)
+    ).r * 2.0 - 1.0;
 
     float waveR = baseR - 0.07
                 + wave * (0.05 + WAVEFORM_AMPLITUDE * kick);
@@ -220,59 +435,38 @@ void main() {
         abs(r - waveR)
     );
 
-    col += mix(vec3(1.0), palette(0.5 + voice), 0.35)
-         * wLine
-         * (0.5 + 1.2 * voice + 0.5 * uVolume + 0.5 * uVoicePeak);
+    col += mix(
+        vec3(1.0),
+        palette(0.5 + voice),
+        0.35
+    ) * wLine * (0.5 + 1.2 * voice + 0.5 * uVolume);
 
-    // -------------------------------------------------------------------------
-    // 5. Ondas de choque
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // 5. EXPANSIÓN GEOMÉTRICA PERIFÉRICA
+    // ------------------------------------------------------------------------
 
-    // beat vale 1 justo en el golpe y decae hacia 0.
-    //
-    // La fórmula original usaba:
-    //     shockR = 0.12 + age * 1.05;
-    //
-    // Aquí usamos SHOCK_MAX_RADIUS para separar claramente el radio máximo
-    // de expansión del tamaño de la visualización. Con 2.40, la onda cruza
-    // el borde corto (r aproximadamente 1) y continúa hasta desaparecer.
-    float age = 1.0 - beat;
-    float shockR = 0.12 + age * (SHOCK_MAX_RADIUS - 0.12);
-    float shockW = 0.02 + SHOCK_WIDTH * beat;
-    float shock = exp(-pow((r - shockR) / shockW, 2.0)) * beat;
+    float grid = holographicGrid(p, r, t);
 
-    col += palette(0.75 + age * 0.5) * shock * SHOCK_INTENSITY;
+    col += vec3(0.12, 0.25, 0.55) * grid * GRID_INTENSITY;
 
-    // Onda azul asociada al golpe de medios/caja.
-    float midAge = 1.0 - midBeat;
-    float midShockR = 0.12 + midAge * (SHOCK_MAX_RADIUS - 0.12);
-    float midShockW = 0.02 + SHOCK_WIDTH * midBeat;
-    float midShock = exp(-pow((r - midShockR) / midShockW, 2.0)) * midBeat;
+    col += kickSystem(p, r, kickPeak, t) * EDGE_INTENSITY;
 
-    col += SHOCK_MID_COLOR * midShock * SHOCK_INTENSITY;
+    col += voiceSystem(p, r, voicePeak, t) * EDGE_INTENSITY;
 
-    // Segundo trazo más fino para remarcar la caja.
-    float snareShock = exp(
-        -pow((r - midShockR) / (midShockW * 0.7), 2.0)
-    ) * midBeat;
-    col += SHOCK_SNARE_COLOR * snareShock;
+    col += snareSystem(p, r, snarePeak, t) * EDGE_INTENSITY;
 
-    // Destello ondulante de hi-hat.
-    float hihatSpark = exp(-pow(
-        (r - (0.55 + sin(t * 12.0 + ang * 8.0) * 0.05)) / 0.02,
-        2.0
-    ));
-    col += vec3(0.8, 0.95, 1.0) * hihatSpark * uHiHatPeak * 0.6;
+    col += hihatSystem(p, r, hihatPeak, t) * EDGE_INTENSITY;
 
-    // -------------------------------------------------------------------------
-    // 6. Postprocesado
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // 6. POSTPROCESADO
+    // ------------------------------------------------------------------------
 
     col *= 1.0 - VIGNETTE_INTENSITY * smoothstep(0.45, 1.70, r);
+
     col += (hash21(vUv * uResolution + t) - 0.5) * GRAIN_INTENSITY;
+
     col = 1.0 - exp(-col * TONEMAP_EXPOSURE);
 
-    // Quita esta línea si tu renderer ya convierte a sRGB.
     col = pow(max(col, 0.0), vec3(1.0 / OUTPUT_GAMMA));
 
     gl_FragColor = vec4(col, 1.0);

@@ -387,29 +387,50 @@ vec3 animatedBackground(vec2 uv, float aspect) {
            * (0.18 + 0.52 * hiHatGridResponse
               * BACKGROUND_GRID_SNARE_RESPONSE);
 
-    // Dos frentes de onda nacen en los laterales y avanzan hacia el centro.
-    // La izquierda responde solo al bombo; la derecha, solo a la caja.
+        // Dos frentes de onda nacen en los laterales y avanzan hacia el centro.
+    // Además, cada origen realiza un movimiento vertical independiente.
+
     float leftWaveSpeed = BACKGROUND_WAVE_SPEED
                         * (1.0 + BACKGROUND_WAVE_KICK_SPEED * kickPulse());
+
     float rightWaveSpeed = BACKGROUND_WAVE_SPEED
                          * (1.0 + BACKGROUND_WAVE_SNARE_SPEED * sat(uSnarePeak));
-    vec2 leftSource = vec2(-max(aspect, 1.0) * 0.92, 0.0);
-    vec2 rightSource = vec2(max(aspect, 1.0) * 0.92, 0.0);
+
+    // Movimiento vertical independiente de cada onda.
+    float leftVertical = sin(t * 0.35) * 0.35;
+    float rightVertical = cos(t * 0.23) * 0.35;
+
+    // Orígenes laterales animados.
+    vec2 leftSource = vec2(-max(aspect, 1.0) * 0.92,
+                           leftVertical);
+
+    vec2 rightSource = vec2(max(aspect, 1.0) * 0.92,
+                            rightVertical);
+
     float leftRadius = length(p - leftSource);
     float rightRadius = length(p - rightSource);
+
     float leftFront = abs(fract(leftRadius * BACKGROUND_WAVE_RADIUS
                                 - t * leftWaveSpeed) - 0.5);
+
     float rightFront = abs(fract(rightRadius * BACKGROUND_WAVE_RADIUS
                                  - t * rightWaveSpeed) - 0.5);
+
     float leftStrength = 0.10 + 0.35 * kickPulse();
     float rightStrength = 0.10 + 0.35 * sat(uSnarePeak);
+
     float leftRings = exp(-leftFront * BACKGROUND_WAVE_BLUR) * leftStrength;
     float rightRings = exp(-rightFront * BACKGROUND_WAVE_BLUR) * rightStrength;
-    float leftHalo = exp(-leftFront * 5.5) * (0.025 + 0.06 * kickPulse());
+
+    float leftHalo = exp(-leftFront * 5.5)
+                   * (0.025 + 0.06 * kickPulse());
+
     float rightHalo = exp(-rightFront * 5.5)
                     * (0.025 + 0.06 * sat(uSnarePeak));
+
     vec3 rightWaveTint = mix(BACKGROUND_RIGHT_WAVE_COLOR,
                              dynamicBackgroundPalette(t, 7.49), 0.22);
+
     color += (leftWaveTint * (leftRings + leftHalo)
            + rightWaveTint * (rightRings + rightHalo))
            * 0.5 * BACKGROUND_WAVE_GAIN;

@@ -5,7 +5,7 @@ import { getCurrentWindow }     from "@tauri-apps/api/window";
 import AudioAnalyzer            from "./audio/AudioAnalyzer.js";
 import Visualizer               from "./rendering/Visualizer.js";
 
-import PlayerControls           from "./ui/PlayerControls.js";
+import ControlsPanel           from "./ui/ControlsPanel.js";
 import QueuePanel               from "./ui/QueuePanel2.js";
 import LibraryPanel             from "./ui/LibraryPanel.js";
 import AudioDebugPanel          from "./ui/AudioDebugPanel.js";
@@ -225,7 +225,7 @@ export default class Application {
         // UI
         //======================================================================
 
-        this.panelControls = new PlayerControls(
+        this.panelControls = new ControlsPanel(
             this.player,
 //            this.player.queue,
             this.settings,

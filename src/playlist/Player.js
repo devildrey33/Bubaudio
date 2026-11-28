@@ -12,7 +12,7 @@
 // Player
 import PlaybackQueue from "./PlaybackQueue.js";
 
-const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
+//const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
 
 /**
  * Coordina la cola de reproducción con el elemento de audio proporcionado por
@@ -84,8 +84,7 @@ export default class Player extends EventTarget {
      * reiniciar la pista actual si ya pasó el umbral, o navegar hacia atrás.
      */
     get canGoPrevious() {
-        return (
-            this.currentTime > PREVIOUS_RESTART_THRESHOLD_SECONDS ||
+        return (            
             this.queue.hasPrevious()
         );
     }
@@ -468,12 +467,12 @@ export default class Player extends EventTarget {
      */
     async restartOrPrevious() {
 
-        if (this.audio.currentTime > PREVIOUS_RESTART_THRESHOLD_SECONDS) {
+/*        if (this.audio.currentTime > PREVIOUS_RESTART_THRESHOLD_SECONDS) {
 
             this.audio.currentTime = 0;
 
             return;
-        }
+        }*/
 
         await this.previous();
     }

@@ -479,7 +479,7 @@ const previousKickEnv = this.#kickEnv;
         if (this.#bassTransientArmed && bassChange > bassThreshold) {
             const strength = this.#transientStrength(bassChange, bassThreshold);
             this.#beat = Math.max(this.#beat, strength);
-            console.log("BASS BEAT");
+//            console.log("BASS BEAT");
             this.#bassTransientArmed = false;
         }
 
@@ -516,10 +516,11 @@ const previousKickEnv = this.#kickEnv;
         const voiceTransient = Math.max(0, voice - this.#voiceEnv);
         const hihatTransient = Math.max(0, hihat - this.#hihatEnv);
 
-if (kickTransient > 0.03 && now - this.#lastBeatTime > 250) {
-    console.log("BPM HIT", kickTransient.toFixed(3));
-    this.#registerBeat(now);
-}        
+        /*if (kickTransient > 0.03 && now - this.#lastBeatTime > 250) {
+            console.log("BPM HIT", kickTransient.toFixed(3));
+            this.#registerBeat(now);
+        } */       
+       
         // ---------------------------------------------------------
         // Peaks para shaders
         // ---------------------------------------------------------
@@ -543,7 +544,7 @@ if (kickTransient > 0.03 && now - this.#lastBeatTime > 250) {
      * suavizar la estimación y evitar saltos bruscos.
      */
     #registerBeat(now) {
-        // Evitar dobles disparos muy seguidos.
+/*        // Evitar dobles disparos muy seguidos.
         if (now - this.#lastBeatTime < 250) {
             return;
         }
@@ -584,7 +585,7 @@ if (kickTransient > 0.03 && now - this.#lastBeatTime > 250) {
                 "interval:",
                 Math.round(this.#beatInterval)
             );
-        }
+        }*/
     }
     /**
      * Convierte el exceso sobre el umbral en la amplitud del pulso.

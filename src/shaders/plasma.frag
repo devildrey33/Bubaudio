@@ -101,7 +101,7 @@ float readHistory(float x, float y) {
 // Distancia a un trazo de una curva polar: r(theta) = base + amp * wave(theta).
 float oscilloscopeRing(float dist, float angle, float baseR, float amp, float sign, float thickness) {
     float t = angle / TAU + 0.5;
-    float w = readWave(t) * sign;
+    float w = (readWave(t) * sign) * 0.75;
     float r = baseR + w * amp;
     float d = abs(dist - r);
     return smoothstep(thickness, 0.0, d);
@@ -110,7 +110,7 @@ float oscilloscopeRing(float dist, float angle, float baseR, float amp, float si
 // Resplandor alrededor del trazo.
 float oscilloscopeGlow(float dist, float angle, float baseR, float amp, float sign, float falloff) {
     float t = angle / TAU + 0.5;
-    float w = readWave(t) * sign;
+    float w = (readWave(t) * sign) * 0.5;
     float r = baseR + w * amp;
     return exp(-abs(dist - r) * falloff);
 }

@@ -1,10 +1,10 @@
 export default class ContextMenu {
 
     #menu;
-    #bindings = new Map();
-    #contextEvent = null;
-    #keepOpenElement = null;
-    #actionPending = false;
+    #bindings           = new Map();
+    #contextEvent       = null;
+    #keepOpenElement    = null;
+    #actionPending      = false;
 
     #handlePointerDown = (event) => {
         if (!this.#menu.contains(event.target)) {

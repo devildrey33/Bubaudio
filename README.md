@@ -108,11 +108,11 @@ Implementado:
 
 
 En desarrollo (TODO) : 
-SOLUCIONAR DILEMAS ANTES DE CONTINUAR
 - [ ] Actualizaciones automáticas
 - [ ] Busqueda en la librería
 - [ ] Añadir url de internet a la queue (hay que vigilar porque actualmente abro las canciones del HD mediante un blob)
 - [ ]  - DILEMA!! : Seria muy complicado hacer listas con spotify y o algun otro servicio de streaming de audio?
+- [ ]     - Se puede pero no es facil, no hay acceso al FFT y habria que mirar el FFT general del SO.
 - [ ] Ecualizador
 - [ ]  - Volver a probar el tema de los BPM
 - [ ] Visualizador de escenas complejas Threejs (ahora mismo es un three.js con un plano2D simple)

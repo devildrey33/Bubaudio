@@ -1,4 +1,4 @@
-import shaders from "../shaders";
+import shaders from "../shaders/index.js";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ContextMenu from "./ContextMenu.js";
